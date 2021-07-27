@@ -44,8 +44,30 @@ def main():
         page_title="UMAP and HDBSCAN for network analysis",
         page_icon="🕸",
         layout="centered",
-        initial_sidebar_state="auto"
+        initial_sidebar_state="auto",
+
     )
+
+    @st.cache
+    def convert_dataframe(df):
+        conversion_dicts = {}
+        for col in df.columns:
+            if df[col].dtype != 'int64' and df[col].dtype != 'float64':
+                try:
+                    df[col] = df[col].astype(int)
+                except Exception as e:
+                    try:
+                        df[col] = df[col].astype(float)
+                    except Exception as e:
+                        mycatdict = { v:i for i, v in enumerate(sorted(list(set(df[col]))))}
+                        conversion_dicts[col] = mycatdict
+                        df[col] = df[col].replace(mycatdict)
+                    else:
+                        print('Successfull conversion of column {} to float.'.format(col))
+                else:
+                    print('Successfull conversion of column {} to int.'.format(col))
+        cdf = pd.DataFrame(conversion_dicts)
+        return df, cdf
 
     @st.cache
     def mean_confidence_interval(data, confidence=0.95):
@@ -97,6 +119,9 @@ def main():
                     st.stop()
                 if 'df_raw' not in st.session_state:
                     st.session_state.df_raw = df_raw
+
+        df_raw, dict_df = convert_dataframe(df_raw)
+
 
         df_cols = list(df_raw.columns)
         col1, col2, col3, col4 = st.beta_columns([1, 1, 1, 2])
@@ -551,19 +576,24 @@ def main():
 
                 st.image(wordcloud.to_image(), width=None)
 
-            with st.beta_expander("Raw dataframe"):
-                st.write(df)
-                st.markdown(download_link(df, 'df_raw.csv', 'Download raw dataset'), unsafe_allow_html=True)
+            # with st.beta_expander("Raw dataframe"):
+            #     st.write(df)
+            #     st.markdown(download_link(df, 'df_raw.csv', 'Download raw dataset'), unsafe_allow_html=True)
 
-            with st.beta_expander("Clustered dataframe"):
-                gephi_cluster_df = cluster_df.copy()
-                gephi_cluster_df['values'] = gephi_cluster_df['values'].apply(lambda x: '_'.join(x))
-                st.write(cluster_df)
-                st.markdown(download_link(gephi_cluster_df, 'clusters.csv', 'Download clusters'), unsafe_allow_html=True)
+            # with st.beta_expander("Clustered dataframe"):
+            #     gephi_cluster_df = cluster_df.copy()
+            #     gephi_cluster_df['values'] = gephi_cluster_df['values'].apply(lambda x: '_'.join(x))
+            #     st.write(cluster_df)
+            #     st.markdown(download_link(gephi_cluster_df, 'clusters.csv', 'Download clusters'), unsafe_allow_html=True)
 
-            with st.beta_expander("Value counts dataframe"):
-                st.write(countdf)
-                st.markdown(download_link(countdf, 'counts.csv', 'Download counts'), unsafe_allow_html=True)
+            # with st.beta_expander("Value counts dataframe"):
+            #     st.write(countdf)
+            #     st.markdown(download_link(countdf, 'counts.csv', 'Download counts'), unsafe_allow_html=True)
+
+            # if len(dict_df) > 0:
+            #     with st.beta_expander("Dictionary for filetype conversion"):
+            #         st.write(dict_df)
+            #         st.markdown(download_link(dict_df, 'dictionary.csv', 'Download dictionary'), unsafe_allow_html=True)
 
         if (not st.session_state.started) and (not DEBUG_OPTIONS["DEBUG"]):
             st.write("""
