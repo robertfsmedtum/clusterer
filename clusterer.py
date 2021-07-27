@@ -27,7 +27,7 @@ def main():
 
     np.random.seed(42)
 
-    default_number_of_neighbors = 15 # 15 # 20 # 5
+    default_number_of_neighbors = 20 # 15 # 20 # 5
     default_minimum_samples = 5 # 5 # 10 # 5
     default_minimum_cluster_size = 20 # 20 # 30 # 50
     default_selection_epsilon = 0.0
