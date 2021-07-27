@@ -63,7 +63,7 @@ def main():
         return f'<a href="data:file/txt;base64,{b64}" download="{download_filename}">{download_link_text}</a>'
 
     st.write("""
-    # 🕸 Network analysis
+    # 🕸 Network analysis 123
     **for higher dimensional data using UMAP¹ and HDBSCAN²**
     """)
 
