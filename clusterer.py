@@ -45,21 +45,32 @@ def main():
         page_icon="🕸",
         layout="centered",
         initial_sidebar_state="auto",
-        
     )
 
     @st.cache
     def convert_dataframe(df):
+        df = df.dropna()
         conversion_dicts = {}
         for col in df.columns:
-            if df[col].dtype != 'int64' and df[col].dtype != 'float64':
+            if df[col].dtype != 'Int64' and df[col].dtype != 'float64':
+                previous_keydict = {}
+                for c in conversion_dicts:
+                    for k in conversion_dicts[c]:
+                        previous_keydict[k] = conversion_dicts[c][k]
                 try:
-                    df[col] = df[col].astype(int)
-                except Exception as e:
+                    df[col] = df[col].astype('Int64')
+                except:
                     try:
                         df[col] = df[col].astype(float)
-                    except Exception as e:
-                        mycatdict = { v:i for i, v in enumerate(sorted(list(set(df[col]))))}
+                    except:
+                        try:
+                            my_different_values = sorted(list(set(df[col])))
+                            mycatdict = { str(v):int(i) for i, v in enumerate(my_different_values)}
+                        except:
+                            mycatdict = { str(v):int(i) for i, v in enumerate(list(set(df[col])))}
+                        for k in previous_keydict:
+                            if k in mycatdict:
+                                mycatdict[k] = int(previous_keydict[k])
                         conversion_dicts[col] = mycatdict
                         df[col] = df[col].replace(mycatdict)
                     else:
@@ -67,6 +78,8 @@ def main():
                 else:
                     print('Successfull conversion of column {} to int.'.format(col))
         cdf = pd.DataFrame(conversion_dicts)
+        for col in cdf.columns:
+            cdf[col] = cdf[col].astype('Int64')
         return df, cdf
 
     @st.cache
@@ -121,7 +134,6 @@ def main():
                     st.session_state.df_raw = df_raw
 
         df_raw, dict_df = convert_dataframe(df_raw)
-
 
         df_cols = list(df_raw.columns)
         col1, col2, col3, col4 = st.beta_columns([1, 1, 1, 2])
