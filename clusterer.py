@@ -20,6 +20,8 @@ def main():
     from networkx.algorithms import community
     from wordcloud import WordCloud
 
+    np.random.seed(42)
+
     default_number_of_neighbors = 20 # 5
     default_minimum_samples = 10 # 5
     default_minimum_cluster_size = 30 # 50
