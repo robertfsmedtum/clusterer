@@ -63,7 +63,7 @@ def main():
         return f'<a href="data:file/txt;base64,{b64}" download="{download_filename}">{download_link_text}</a>'
 
     st.write("""
-    # 🕸 Network analysis v1.0
+    # 🕸 UHC - Network analysis v1.0
     **for higher dimensional data using UMAP¹ and HDBSCAN²**
     """)
 
@@ -72,8 +72,8 @@ def main():
     if (uploaded_file is None and not DEBUG_OPTIONS["DEBUG"]) and 'df_raw' not in st.session_state:
         st.write("""
             ## **Instructions**
-            Choose a csv or excel file containing columns of binary, categorical or numerical data.
-            The analysis starts automatically after a file was chosen.\n
+            With the UMAP-HDBSCAN-Clusterer (UHC) you can choose a csv or excel file containing columns of binary, \n
+            categorical or numerical data. The analysis starts automatically after a file was chosen.\n
             *Note that this is a local application which works offline when using with a localhost adress.*
             *The provided datasets do **not** get uploaded and you can stay offline after the application first loaded.*\n
             When you use the streamlit hosted version, see https://streamlit.io/privacy-policy for details: \n
