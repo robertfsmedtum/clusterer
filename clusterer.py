@@ -22,9 +22,9 @@ def main():
 
     np.random.seed(42)
 
-    default_number_of_neighbors = 20 # 5
-    default_minimum_samples = 10 # 5
-    default_minimum_cluster_size = 30 # 50
+    default_number_of_neighbors = 15 # 20 # 5
+    default_minimum_samples = 5 # 10 # 5
+    default_minimum_cluster_size = 20 # 30 # 50
     standard_scalar_default = 0 # 0 = Yes, 1 = No
     pairwisedistance_default = 0 # 0 = Yes, 1 = No
     default_maximum_number_of_nodes = 20
@@ -371,7 +371,7 @@ def main():
                 ), text_font_style="italic"), 'above')
 
             if True in clustered:
-                plot_figure.add_layout(Title(text="UMAP projection with {} color separated clusters".format(len(different_labels)), text_font_size="16pt"), 'above')
+                plot_figure.add_layout(Title(text="UMAP projection with {} color separated clusters".format(len(different_labels)-1), text_font_size="16pt"), 'above')
             else:
                 plot_figure.add_layout(Title(text="UMAP projection with no separated clusters", text_font_size="16pt"), 'above')
 
