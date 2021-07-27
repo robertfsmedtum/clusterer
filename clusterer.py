@@ -72,7 +72,7 @@ def main():
     if (uploaded_file is None and not DEBUG_OPTIONS["DEBUG"]) and 'df_raw' not in st.session_state:
         st.write("""
             ## **Instructions**
-            With the UMAP-HDBSCAN-Clusterer (UHC) you can choose a csv or excel file containing columns of binary, \n
+            With the UMAP-HDBSCAN-Clusterer (UHC) you can choose a csv or excel file containing columns of binary,
             categorical or numerical data. The analysis starts automatically after a file was chosen.\n
             *Note that this is a local application which works offline when using with a localhost adress.*
             *The provided datasets do **not** get uploaded and you can stay offline after the application first loaded.*\n
