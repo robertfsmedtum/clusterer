@@ -72,14 +72,12 @@ def main():
                             if k in mycatdict:
                                 mycatdict[k] = int(previous_keydict[k])
                         conversion_dicts[col] = mycatdict
-                        df[col] = df[col].replace(mycatdict)
-                    else:
-                        print('Successfull conversion of column {} to float.'.format(col))
-                else:
-                    print('Successfull conversion of column {} to int.'.format(col))
+                        df[col] = df[col].replace(mycatdict).astype('Int64')
+                #     else:
+                #         print('Successfull conversion of column {} to float.'.format(col))
+                # else:
+                #     print('Successfull conversion of column {} to int.'.format(col))
         cdf = pd.DataFrame(conversion_dicts)
-        for col in cdf.columns:
-            cdf[col] = cdf[col].astype('Int64')
         return df, cdf
 
     @st.cache
@@ -308,7 +306,6 @@ def main():
             mapper = linear_cmap(field_name='cluster', palette=Turbo256, low=min(different_labels), high=max(different_labels))
 
             different_labels_sorted = sorted(different_labels)
-            different_labels_length = len(different_labels)
             total_color_length = len(Turbo256)
             clustercolors = {}
 
@@ -316,12 +313,12 @@ def main():
             # print('Available labels:')
             # print(different_labels_sorted)
 
-            if different_labels_length > 1:
-                for i in range(different_labels_length):
-                    colorindex = i * int(total_color_length/(different_labels_length-1))
+            if len(different_labels_sorted) > 1:
+                for i in range(len(different_labels_sorted)):
+                    colorindex = i * int(total_color_length/(len(different_labels_sorted)-1))
                     clustercolors[int(different_labels_sorted[i])] = Turbo256[colorindex]
             else:
-                clustercolors[int(different_labels_sorted[0])] = Turbo256[0]
+                clustercolors[-1] = Turbo256[0]
 
             plot_figure.circle(
                 'x',
