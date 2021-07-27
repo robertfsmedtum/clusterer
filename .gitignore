@@ -3,3 +3,4 @@ __pycache__
 .DS_STORE
 graph_files
 rest.txt
+data.csv

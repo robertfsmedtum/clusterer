@@ -23,6 +23,7 @@ setup(
       'hdbscan',
       'sklearn',
       'openpyxl',
+      'matplotlib',
       'bokeh==2.2.2',
       'decorator==4.4.2',
       'networkx==2.5.1',

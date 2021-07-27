@@ -1,3 +1,8 @@
+## TODO Add probabilities
+## TODO Find binary classifier
+## TODO Add linkage tree to analysis
+## TODO ...
+
 def main():
     import os
     import pandas as pd
@@ -17,16 +22,18 @@ def main():
     import umap
     import itertools
     import networkx as nx
+    import matplotlib.pyplot as plt
     from networkx.algorithms import community
     from wordcloud import WordCloud
 
     np.random.seed(42)
 
-    default_number_of_neighbors = 15 # 20 # 5
-    default_minimum_samples = 5 # 10 # 5
-    default_minimum_cluster_size = 20 # 30 # 50
-    standard_scalar_default = 0 # 0 = Yes, 1 = No
-    pairwisedistance_default = 0 # 0 = Yes, 1 = No
+    default_number_of_neighbors = 15 # 15 # 20 # 5
+    default_minimum_samples = 5 # 5 # 10 # 5
+    default_minimum_cluster_size = 20 # 20 # 30 # 50
+    default_selection_epsilon = 0.0
+    standard_scalar_default = 0 # 1 = Yes, 0 = No
+    pairwisedistance_default = 0 # 1 = Yes, 0 = No
     default_maximum_number_of_nodes = 20
 
     if 'started' not in st.session_state:
@@ -35,7 +42,10 @@ def main():
     DEBUG_OPTIONS = {
         "DEBUG": False,
         "input": "./data.csv",
-        "save_graph": True
+        "save_graph": True,
+        # "options": {
+        #     'data': [1]
+        # }
     }
 
     st.set_option('deprecation.showPyplotGlobalUse', False)
@@ -73,10 +83,6 @@ def main():
                                 mycatdict[k] = int(previous_keydict[k])
                         conversion_dicts[col] = mycatdict
                         df[col] = df[col].replace(mycatdict).astype('Int64')
-                #     else:
-                #         print('Successfull conversion of column {} to float.'.format(col))
-                # else:
-                #     print('Successfull conversion of column {} to int.'.format(col))
         cdf = pd.DataFrame(conversion_dicts)
         return df, cdf
 
@@ -178,8 +184,8 @@ def main():
             metric = st.selectbox(
                 "What metric do you want to use in UMAP?",
                 (
-                    "euclidean",
                     "manhattan",
+                    "euclidean",
                     "chebyshev",
                     "canberra",
                     "braycurtis",
@@ -195,9 +201,10 @@ def main():
                     "yule"
                 ))
 
-            number_of_neighbors = st.slider('Minimum number of neighbors (UMAP)', 1, 100, default_number_of_neighbors, step=1)
+            number_of_neighbors = st.slider('Minimum number of neighbors (UMAP)', 2, 100, default_number_of_neighbors, step=1)
             minimum_samples = st.slider('Minimum number of samples (HDBSCAN)', 1, 100, default_minimum_samples, step=1)
-            minimum_cluster_size = st.slider('Minimum cluster size (HDBSCAN)', 1, 100, default_minimum_cluster_size, step=1)
+            minimum_cluster_size = st.slider('Minimum cluster size (HDBSCAN)', 2, 100, default_minimum_cluster_size, step=1)
+            cluster_selection_epsilon = st.slider('Cluster selection minimum (HDBSCAN)', 0.0, 2.0, default_selection_epsilon, step=0.1, format=f"%1f")
             standardscalar = st.radio(
                 'Use standardscalar transformation',
                 ['Yes', 'No'],
@@ -207,6 +214,11 @@ def main():
                 'Use pairwise distance',
                 ['Yes', 'No'],
                 1-pairwisedistance_default
+            )
+
+            color_this_col = st.selectbox(
+                'Select column to color',
+                ['None'] + df_cols,
             )
 
         if st.sidebar.button('▶️ Start analysis') or DEBUG_OPTIONS["DEBUG"] or st.session_state.started:
@@ -256,15 +268,17 @@ def main():
             standard_embedding = trans.transform(scaled_df)
 
             @st.cache
-            def calculate_hdbscan(input_metric, input_min_samples, input_min_cluster_size, input_standard_embedding):
+            def calculate_hdbscan(input_metric, input_min_samples, input_min_cluster_size, input_standard_embedding, cluster_selection_epsilon):
                 return hdbscan.HDBSCAN(
                     metric=input_metric,
                     min_samples=input_min_samples, 
                     min_cluster_size=input_min_cluster_size,
+                    cluster_selection_epsilon=cluster_selection_epsilon,
                     prediction_data=True
                     ).fit(input_standard_embedding)
             
-            clusterer = copy.deepcopy(calculate_hdbscan(metric, minimum_samples, minimum_cluster_size, standard_embedding))
+            new_input_metric = 'precomputed' if pairwisedistance == 'Yes' else metric
+            clusterer = copy.deepcopy(calculate_hdbscan(new_input_metric, minimum_samples, minimum_cluster_size, standard_embedding, cluster_selection_epsilon))
             hdbscan_labels = clusterer.labels_
 
             clustered = (hdbscan_labels >= 0)
@@ -284,10 +298,13 @@ def main():
                     
             cluster_df = pd.DataFrame(standard_embedding, columns=('x', 'y'))
             cluster_df['cluster'] = [str(x) for x in hdbscan_labels]
+            if color_this_col != 'None':
+                cluster_df['color by ' + color_this_col] = scaled_df[color_this_col]
+                different_labels = list(set(scaled_df[color_this_col]))
+            else:
+                different_labels = list(set(hdbscan_labels))
             cluster_df['values'] = df.apply(lambda x: return_value_list(x), axis=1)
             datasource = ColumnDataSource(cluster_df)
-
-            different_labels = list(set(hdbscan_labels))
 
             plot_figure = figure(
                 tools=('pan, wheel_zoom, reset, save')
@@ -303,15 +320,16 @@ def main():
             </div>
             """))
 
-            mapper = linear_cmap(field_name='cluster', palette=Turbo256, low=min(different_labels), high=max(different_labels))
+            if color_this_col != 'None':
+                mapper = linear_cmap(field_name='color by ' + color_this_col, palette=Turbo256, low=min(different_labels), high=max(different_labels)+0.5)
+            else:
+                mapper = linear_cmap(field_name='cluster', palette=Turbo256, low=min(different_labels), high=max(different_labels))
 
             different_labels_sorted = sorted(different_labels)
             total_color_length = len(Turbo256)
             clustercolors = {}
 
-            # print('Number of different labels: {}'.format(different_labels_length))
-            # print('Available labels:')
-            # print(different_labels_sorted)
+            # st.pyplot(fig=axes, use_container_width=True)
 
             if len(different_labels_sorted) > 1:
                 for i in range(len(different_labels_sorted)):
@@ -367,13 +385,16 @@ def main():
                 plot_figure.add_layout(color_bar, 'right')
 
             plot_figure.add_layout(Title(text='metric: {}, number of neighbors: {}, minimum sample size: {}, minimum cluster size: {}'.format(
-                    metric, number_of_neighbors, minimum_samples, minimum_cluster_size
+                    new_input_metric, number_of_neighbors, minimum_samples, minimum_cluster_size
                 ), text_font_style="italic"), 'above')
 
-            if True in clustered:
-                plot_figure.add_layout(Title(text="UMAP projection with {} color-separated clusters".format(len(different_labels)-1), text_font_size="16pt"), 'above')
+            if color_this_col != 'None':
+                    plot_figure.add_layout(Title(text="UMAP projection colored in {} different {} values".format(len(different_labels), color_this_col), text_font_size="16pt"), 'above')
             else:
-                plot_figure.add_layout(Title(text="UMAP projection with no separated clusters", text_font_size="16pt"), 'above')
+                if True in clustered:
+                    plot_figure.add_layout(Title(text="UMAP projection with {} color-separated clusters".format(len(different_labels)-1), text_font_size="16pt"), 'above')
+                else:
+                    plot_figure.add_layout(Title(text="UMAP projection with no separated clusters", text_font_size="16pt"), 'above')
 
             st.bokeh_chart(plot_figure, use_container_width=True)
 
@@ -396,7 +417,7 @@ def main():
                 if prediction_to_cluster == -2:
                     cluster = st.sidebar.selectbox(
                         "Select a cluster for network analysis",
-                        tuple(all_clusters),
+                        sorted(tuple(all_clusters), key=lambda x: int(x)),
                         1
                     )
                 else:
@@ -472,36 +493,36 @@ def main():
 
             nx.set_node_attributes(G, name='adjusted_node_size', values=adjusted_node_size)
 
-            communities = community.greedy_modularity_communities(G)
+            size_by_this_attribute = 'adjusted_node_size'
+            color_by_this_attribute = 'modularity_color'
 
-            # Create empty dictionaries
-            modularity_class = {}
-            modularity_color = {}
+            try:
+                communities = community.greedy_modularity_communities(G)
+            except:
+                communities = None
+                color_by_this_attribute = clustercolors[int(cluster)]
+            else:
+                # Create empty dictionaries
+                modularity_class = {}
+                modularity_color = {}
 
-            communities_total = len(list(set(list(communities))))
+                communities_total = len(list(set(list(communities))))
 
-            #Loop through each community in the network
-            for community_number, community in enumerate(communities):
-                #For each member of the community, add their community number and a distinct color
-                for name in community: 
-                    modularity_class[name] = community_number
-                    modularity_color[name] = Turbo256[int(community_number*(1/communities_total)*len(Turbo256))]
+                #Loop through each community in the network
+                for community_number, community in enumerate(communities):
+                    #For each member of the community, add their community number and a distinct color
+                    for name in community: 
+                        modularity_class[name] = community_number
+                        modularity_color[name] = Turbo256[int(community_number*(1/communities_total)*len(Turbo256))]
 
 
-            # Add modularity class and color as attributes from the network above
-            nx.set_node_attributes(G, modularity_class, 'modularity_class')
-            nx.set_node_attributes(G, modularity_color, 'modularity_color')
+                # Add modularity class and color as attributes from the network above
+                nx.set_node_attributes(G, modularity_class, 'modularity_class')
+                nx.set_node_attributes(G, modularity_color, 'modularity_color')
 
             #Choose colors for node and edge highlighting
             node_highlight_color = 'white'
             edge_highlight_color = 'black'
-
-            #Choose attributes from G network to size and color by — setting manual size (e.g. 10) or color (e.g. 'skyblue') also allowed
-            size_by_this_attribute = 'adjusted_node_size'
-            color_by_this_attribute = 'modularity_color'
-
-            #Pick a color palette — Blues8, Reds8, Purples8, Oranges8, Viridis8
-            color_palette = Turbo256
 
             #Choose a title!
             if int(cluster) != -1:
@@ -510,12 +531,18 @@ def main():
                 title = 'Network graph of unclustered data'
 
             #Establish which categories will appear when hovering over each node
-            HOVER_TOOLTIPS = [
-                ("Value", "@index"),
-                    ("Degree", "@degree"),
-                    ("Modularity Class", "@modularity_class"),
-                    ("Modularity Color", "$color[swatch]:modularity_color"),
-            ]
+            if communities:
+                HOVER_TOOLTIPS = [
+                    ("Value", "@index"),
+                        ("Degree", "@degree"),
+                        ("Modularity Class", "@modularity_class"),
+                        ("Modularity Color", "$color[swatch]:modularity_color"),
+                ]
+            else:
+                HOVER_TOOLTIPS = [
+                    ("Value", "@index"),
+                    ("Degree", "@degree")
+                ]
 
             #Create a plot — set dimensions, toolbar, and title
             plot = figure(tooltips = HOVER_TOOLTIPS, sizing_mode = 'scale_height',
@@ -580,6 +607,11 @@ def main():
                     os.makedirs('./graph_files', exist_ok=True)
                     gdf = gephi_cluster_df[gephi_cluster_df['cluster'] == c].reset_index(drop=True)
                     gdf.to_excel('./graph_files/graph_c' + str(c) + '.xlsx', index=False)
+
+            fig, ax = plt.subplots()
+            clusterer.condensed_tree_.plot(select_clusters=True, selection_palette=list(clustercolors.values())[1:], axis=ax)
+            plt.title('Cluster hierarchy as dendrogram')
+            st.pyplot(fig)
 
             if cluster in all_counts:
                 wordcloud = WordCloud(
