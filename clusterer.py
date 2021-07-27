@@ -2,7 +2,6 @@ def main():
     import os
     import pandas as pd
     import numpy as np
-    import umap
     import base64
     import hdbscan
     import copy
@@ -15,6 +14,7 @@ def main():
     from bokeh.models import HoverTool, ColumnDataSource, Label, NodesAndLinkedEdges, MultiLine, Title, Circle, ColorBar, BasicTicker, LinearColorMapper, Range1d
     from bokeh.palettes import Turbo256
     from collections import Counter
+    import umap
     import itertools
     import networkx as nx
     from networkx.algorithms import community
