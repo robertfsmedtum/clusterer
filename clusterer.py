@@ -316,6 +316,8 @@ def main():
             if len(different_labels_sorted) > 1:
                 for i in range(len(different_labels_sorted)):
                     colorindex = i * int(total_color_length/(len(different_labels_sorted)-1))
+                    if colorindex > 255:
+                        colorindex = 255
                     clustercolors[int(different_labels_sorted[i])] = Turbo256[colorindex]
             else:
                 clustercolors[-1] = Turbo256[0]
