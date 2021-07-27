@@ -371,7 +371,7 @@ def main():
                 ), text_font_style="italic"), 'above')
 
             if True in clustered:
-                plot_figure.add_layout(Title(text="UMAP projection with {} color separated clusters".format(len(different_labels)-1), text_font_size="16pt"), 'above')
+                plot_figure.add_layout(Title(text="2D UMAP projection with {} color-separated HDBSCAN clusters".format(len(different_labels)-1), text_font_size="16pt"), 'above')
             else:
                 plot_figure.add_layout(Title(text="UMAP projection with no separated clusters", text_font_size="16pt"), 'above')
 
