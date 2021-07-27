@@ -1,7 +1,6 @@
 ## TODO Add probabilities
-## TODO Find binary classifier
-## TODO Add linkage tree to analysis
-## TODO ...
+## TODO Better network graph
+## TODO Nodes to export to networkx
 
 def main():
     import os
@@ -44,7 +43,7 @@ def main():
         "input": "./data.csv",
         "save_graph": True,
         # "options": {
-        #     'data': [1]
+        #     'col': [1]
         # }
     }
 
@@ -321,7 +320,7 @@ def main():
             """))
 
             if color_this_col != 'None':
-                mapper = linear_cmap(field_name='color by ' + color_this_col, palette=Turbo256, low=min(different_labels), high=max(different_labels)+0.5)
+                mapper = linear_cmap(field_name='color by ' + color_this_col, palette=Turbo256, low=min(different_labels), high=max(different_labels)+0.8)
             else:
                 mapper = linear_cmap(field_name='cluster', palette=Turbo256, low=min(different_labels), high=max(different_labels))
 
@@ -494,31 +493,31 @@ def main():
             nx.set_node_attributes(G, name='adjusted_node_size', values=adjusted_node_size)
 
             size_by_this_attribute = 'adjusted_node_size'
-            color_by_this_attribute = 'modularity_color'
+            # color_by_this_attribute = 'modularity_color'
 
-            try:
-                communities = community.greedy_modularity_communities(G)
-            except:
-                communities = None
-                color_by_this_attribute = clustercolors[int(cluster)]
-            else:
-                # Create empty dictionaries
-                modularity_class = {}
-                modularity_color = {}
+            # try:
+            #     communities = community.greedy_modularity_communities(G)
+            # except:
+            #     communities = None
+            #     # color_by_this_attribute = clustercolors[int(cluster)]
+            # else:
+            #     # Create empty dictionaries
+            #     modularity_class = {}
+            #     modularity_color = {}
 
-                communities_total = len(list(set(list(communities))))
+            #     communities_total = len(list(set(list(communities))))
 
-                #Loop through each community in the network
-                for community_number, community in enumerate(communities):
-                    #For each member of the community, add their community number and a distinct color
-                    for name in community: 
-                        modularity_class[name] = community_number
-                        modularity_color[name] = Turbo256[int(community_number*(1/communities_total)*len(Turbo256))]
+            #     #Loop through each community in the network
+            #     for community_number, community in enumerate(communities):
+            #         #For each member of the community, add their community number and a distinct color
+            #         for name in community: 
+            #             modularity_class[name] = community_number
+            #             modularity_color[name] = Turbo256[int(community_number*(1/communities_total)*len(Turbo256))]
 
 
-                # Add modularity class and color as attributes from the network above
-                nx.set_node_attributes(G, modularity_class, 'modularity_class')
-                nx.set_node_attributes(G, modularity_color, 'modularity_color')
+            #     # Add modularity class and color as attributes from the network above
+            #     nx.set_node_attributes(G, modularity_class, 'modularity_class')
+            #     nx.set_node_attributes(G, modularity_color, 'modularity_color')
 
             #Choose colors for node and edge highlighting
             node_highlight_color = 'white'
@@ -531,18 +530,18 @@ def main():
                 title = 'Network graph of unclustered data'
 
             #Establish which categories will appear when hovering over each node
-            if communities:
-                HOVER_TOOLTIPS = [
-                    ("Value", "@index"),
-                        ("Degree", "@degree"),
-                        ("Modularity Class", "@modularity_class"),
-                        ("Modularity Color", "$color[swatch]:modularity_color"),
-                ]
-            else:
-                HOVER_TOOLTIPS = [
-                    ("Value", "@index"),
-                    ("Degree", "@degree")
-                ]
+            # if communities:
+            #     HOVER_TOOLTIPS = [
+            #         ("Value", "@index"),
+            #             ("Degree", "@degree"),
+            #             ("Modularity Class", "@modularity_class"),
+            #             ("Modularity Color", "$color[swatch]:modularity_color"),
+            #     ]
+            # else:
+            HOVER_TOOLTIPS = [
+                ("Value", "@index"),
+                ("Degree", "@degree")
+            ]
 
             #Create a plot — set dimensions, toolbar, and title
             plot = figure(tooltips = HOVER_TOOLTIPS, sizing_mode = 'scale_height',
@@ -550,16 +549,18 @@ def main():
                         x_range=Range1d(-10.1, 10.1), y_range=Range1d(-10.1, 10.1), title=title) # , plot_width=600, plot_height=600)
 
             plot.title.text_color = clustercolors[int(cluster)]
-            plot.background_fill_color = clustercolors[int(cluster)]
-            plot.background_fill_alpha = 0.1
+            
+            # plot.background_fill_color = clustercolors[int(cluster)]
+            # plot.background_fill_alpha = 0.1
 
 
             #Create a network graph object
             # https://networkx.github.io/documentation/networkx-1.9/reference/generated/networkx.drawing.layout.spring_layout.html
             network_graph = from_networkx(G, nx.spring_layout, scale=10, center=(0, 0))
 
-            #Set node sizes and colors according to node degree (color as category from attribute)
-            network_graph.node_renderer.glyph = Circle(size=size_by_this_attribute, fill_color=color_by_this_attribute)
+            #Set node sizes and colors according to node degree (color as category from attribute) clustercolors[int(cluster)]
+            network_graph.node_renderer.glyph = Circle(size=size_by_this_attribute, fill_color=clustercolors[int(cluster)], line_width=0)
+            # network_graph.node_renderer.glyph = Circle(size=size_by_this_attribute, fill_color=color_by_this_attribute)
             #Set node highlight colors
             network_graph.node_renderer.hover_glyph = Circle(size=size_by_this_attribute, fill_color=node_highlight_color, line_width=2)
             network_graph.node_renderer.selection_glyph = Circle(size=size_by_this_attribute, fill_color=node_highlight_color, line_width=2)
@@ -608,8 +609,11 @@ def main():
                     gdf = gephi_cluster_df[gephi_cluster_df['cluster'] == c].reset_index(drop=True)
                     gdf.to_excel('./graph_files/graph_c' + str(c) + '.xlsx', index=False)
 
+            # g = clusterer.condensed_tree_.to_networkx()
+            # nx.write_gexf(g, "network.gexf")
+
             fig, ax = plt.subplots()
-            clusterer.condensed_tree_.plot(select_clusters=True, selection_palette=list(clustercolors.values())[1:], axis=ax)
+            clusterer.condensed_tree_.plot(select_clusters=True, selection_palette=list(clustercolors.values())[1:], axis=ax)            
             plt.title('Cluster hierarchy as dendrogram')
             st.pyplot(fig)
 
