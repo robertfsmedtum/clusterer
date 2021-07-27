@@ -45,7 +45,7 @@ def main():
         page_icon="🕸",
         layout="centered",
         initial_sidebar_state="auto",
-
+        
     )
 
     @st.cache
@@ -576,24 +576,24 @@ def main():
 
                 st.image(wordcloud.to_image(), width=None)
 
-            # with st.beta_expander("Raw dataframe"):
-            #     st.write(df)
-            #     st.markdown(download_link(df, 'df_raw.csv', 'Download raw dataset'), unsafe_allow_html=True)
+            with st.beta_expander("Raw dataframe"):
+                st.write(df)
+                st.markdown(download_link(df, 'df_raw.csv', 'Download raw dataset'), unsafe_allow_html=True)
 
-            # with st.beta_expander("Clustered dataframe"):
-            #     gephi_cluster_df = cluster_df.copy()
-            #     gephi_cluster_df['values'] = gephi_cluster_df['values'].apply(lambda x: '_'.join(x))
-            #     st.write(cluster_df)
-            #     st.markdown(download_link(gephi_cluster_df, 'clusters.csv', 'Download clusters'), unsafe_allow_html=True)
+            with st.beta_expander("Clustered dataframe"):
+                gephi_cluster_df = cluster_df.copy()
+                gephi_cluster_df['values'] = gephi_cluster_df['values'].apply(lambda x: '_'.join(x))
+                st.write(cluster_df)
+                st.markdown(download_link(gephi_cluster_df, 'clusters.csv', 'Download clusters'), unsafe_allow_html=True)
 
-            # with st.beta_expander("Value counts dataframe"):
-            #     st.write(countdf)
-            #     st.markdown(download_link(countdf, 'counts.csv', 'Download counts'), unsafe_allow_html=True)
+            with st.beta_expander("Value counts dataframe"):
+                st.write(countdf)
+                st.markdown(download_link(countdf, 'counts.csv', 'Download counts'), unsafe_allow_html=True)
 
-            # if len(dict_df) > 0:
-            #     with st.beta_expander("Dictionary for filetype conversion"):
-            #         st.write(dict_df)
-            #         st.markdown(download_link(dict_df, 'dictionary.csv', 'Download dictionary'), unsafe_allow_html=True)
+            if len(dict_df) > 0:
+                with st.beta_expander("Dictionary for filetype conversion"):
+                    st.write(dict_df)
+                    st.markdown(download_link(dict_df, 'dictionary.csv', 'Download dictionary'), unsafe_allow_html=True)
 
         if (not st.session_state.started) and (not DEBUG_OPTIONS["DEBUG"]):
             st.write("""

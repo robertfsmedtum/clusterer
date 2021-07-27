@@ -18,7 +18,6 @@ setup(
       'streamlit',
       'pandas',
       'umap-learn',
-      'umap',
       'numba',
       'scipy',
       'hdbscan',
