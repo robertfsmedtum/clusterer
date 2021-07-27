@@ -1,4 +1,4 @@
-# UMAP and HDBSCAN clusterer
+# UMAP + HDBSCAN clusterer
 
 ## Local usage
 1) open terminal and navigate to the folder containing clusterer.py and setup.py
