@@ -371,7 +371,7 @@ def main():
                 ), text_font_style="italic"), 'above')
 
             if True in clustered:
-                plot_figure.add_layout(Title(text="2D UMAP projection with {} color-separated HDBSCAN clusters".format(len(different_labels)-1), text_font_size="16pt"), 'above')
+                plot_figure.add_layout(Title(text="UMAP projection with {} color-separated clusters".format(len(different_labels)-1), text_font_size="16pt"), 'above')
             else:
                 plot_figure.add_layout(Title(text="UMAP projection with no separated clusters", text_font_size="16pt"), 'above')
 
@@ -432,7 +432,11 @@ def main():
 
             nodeweights = {k: v for k, v in sorted(nodeweights.items(), key=lambda item: item[1], reverse=True)[:maximum_number_of_nodes]}
             labels, counts = zip(*list(nodeweights.items())[::-1])
-            p_node = figure(y_range=labels, title="Value counts in cluster {}".format(cluster),
+            if int(cluster) != -1:
+                mytitle = "Value counts in cluster {}".format(cluster)
+            else:
+                mytitle = "Value counts of unclustered data"
+            p_node = figure(y_range=labels, title=mytitle,
                 toolbar_location=None, plot_height=maximum_number_of_nodes*20)
             p_node.hbar(y=labels, right=counts, color=clustercolors[int(cluster)], height=0.618)
             p_node.title.text_color = clustercolors[int(cluster)]
@@ -500,7 +504,10 @@ def main():
             color_palette = Turbo256
 
             #Choose a title!
-            title = 'Network graph of cluster {}'.format(cluster)
+            if int(cluster) != -1:
+                title = 'Network graph of cluster {}'.format(cluster)
+            else:
+                title = 'Network graph of unclustered data'
 
             #Establish which categories will appear when hovering over each node
             HOVER_TOOLTIPS = [
