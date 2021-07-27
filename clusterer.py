@@ -603,8 +603,6 @@ def main():
                 your dataset by values in that specific column.
                 If you are done, just press the **Start analysis** button at the
                 bottom of the left sidebar.\n
-                *Note that this is a frontend application which works offline*
-                *The provided datasets do **not** get uploaded and you can stay offline after the application first loaded.*
             """)
 
 
