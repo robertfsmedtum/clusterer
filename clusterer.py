@@ -38,6 +38,7 @@ def main():
     standard_scalar_default = 0 # 1 = Yes, 0 = No
     pairwisedistance_default = 0 # 1 = Yes, 0 = No
     default_maximum_number_of_nodes = 20
+    densemap_default = 0
 
     remaining_dimensions = 2
     minimum_distance = 0.0
@@ -220,6 +221,11 @@ def main():
                 ['Yes', 'No'],
                 1-standard_scalar_default
             )
+            densemap = st.radio(
+                'Use densmap',
+                ['Yes', 'No'],
+                1-densemap_default
+            )
             pairwisedistance = st.radio(
                 'Use pairwise distance',
                 ['Yes', 'No'],
@@ -266,15 +272,17 @@ def main():
                 scaled_df = pairwise_distances(scaled_df)
 
             @st.cache
-            def calculate_umap(n_o_n, input_df, minimum_distance):
+            def calculate_umap(n_o_n, input_df, minimum_distance, use_densemap):
                 return umap.UMAP(
                     n_neighbors=n_o_n,
                     min_dist=minimum_distance,
                     n_components=remaining_dimensions,
-                    random_state=random_seed
+                    random_state=random_seed,
+                    densmap=use_densemap
                     ).fit(input_df)
 
-            trans = calculate_umap(number_of_neighbors, scaled_df, minimum_distance)
+            use_densemap = True if densemap == 'Yes' else False
+            trans = calculate_umap(number_of_neighbors, scaled_df, minimum_distance, use_densemap)
             standard_embedding = trans.transform(scaled_df)
 
             @st.cache
@@ -288,6 +296,7 @@ def main():
                     ).fit(input_standard_embedding)
             
             new_input_metric = 'precomputed' if pairwisedistance == 'Yes' else metric
+            
             clusterer = copy.deepcopy(calculate_hdbscan(new_input_metric, minimum_samples, minimum_cluster_size, standard_embedding, cluster_selection_epsilon))
             hdbscan_labels = clusterer.labels_
 
@@ -619,7 +628,6 @@ def main():
             x, y = zip(*network_graph.layout_provider.graph_layout.values())
             node_labels = list(G.nodes())
 
-
             node_labels_size = [int(x[1]["adjusted_node_size"]) for x in list(G.nodes.data())]
             max_node_label_size = max(node_labels_size)
             min_node_label_size = min(node_labels_size)
@@ -717,12 +725,12 @@ def main():
                     filtered_mean_ci[0], 
                     filtered_mean_ci[1],
                     number_of_neighbors,
-                    minimum_distance,
+                    int(minimum_distance) if float(minimum_distance).is_integer() else minimum_distance,
                     remaining_dimensions,
                     remaining_dimensions,
                     minimum_samples,
                     minimum_cluster_size,
-                    cluster_selection_epsilon,
+                    int(cluster_selection_epsilon) if float(cluster_selection_epsilon).is_integer() else cluster_selection_epsilon,
                     metric,
                     random_seed,
                     len(different_labels)-1,
