@@ -113,7 +113,7 @@ def main():
 
     st.write("""
     # 🕸 UHC - Network analysis v1.0
-    **for higher dimensional data using UMAP¹ and HDBSCAN²**
+    **for higher dimensional data using UMAP¹ and HDBSCAN²𝄒³**
     """)
 
     uploaded_file = st.sidebar.file_uploader("📂 Select a file (csv or excel)")
@@ -765,7 +765,8 @@ def main():
     st.write("""
     ### **Citations**
     ¹ McInnes, L., Healy, J., Saul, N. & Großberger, L. UMAP: uniform manifold approximation and projection. J. Open Source Softw. 3, 861 (2018).\n
-    ² L. McInnes, J. Healy, S. Astels, hdbscan: Hierarchical density based clustering In: Journal of Open Source Software, The Open Journal, volume 2, number 11. 2017
+    ² L. McInnes, J. Healy, S. Astels, hdbscan: Hierarchical density based clustering In: Journal of Open Source Software, The Open Journal, volume 2, number 11. 2017.\n
+    ³ Campello R.J.G.B., Moulavi D., Sander J. (2013) Density-Based Clustering Based on Hierarchical Density Estimates. In: Pei J., Tseng V.S., Cao L., Motoda H., Xu G. (eds) Advances in Knowledge Discovery and Data Mining. PAKDD 2013. Lecture Notes in Computer Science, vol 7819. Springer, Berlin, Heidelberg.\n
     """)
 
 
