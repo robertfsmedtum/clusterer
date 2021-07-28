@@ -50,7 +50,7 @@ def main():
         st.session_state.started = False
 
     DEBUG_OPTIONS = {
-        "DEBUG": True,
+        "DEBUG": False,
         "input": "./data.csv",
         "save_graph": True,
         # "options": {
