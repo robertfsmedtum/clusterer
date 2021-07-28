@@ -2,9 +2,6 @@
 ## TODO Better network graph
 ## TODO Nodes to export to networkx
 
-from numpy.ma.core import minimum
-
-
 def main():
     import os
     import pandas as pd
