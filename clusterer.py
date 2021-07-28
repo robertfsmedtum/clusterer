@@ -1,7 +1,3 @@
-## TODO Add probabilities
-## TODO Better network graph
-## TODO Nodes to export to networkx
-
 def main():
     import os
     import pandas as pd
@@ -296,6 +292,7 @@ def main():
             
             clusterer = copy.deepcopy(calculate_hdbscan(new_input_metric, minimum_samples, minimum_cluster_size, standard_embedding, cluster_selection_epsilon))
             hdbscan_labels = clusterer.labels_
+            hdbscan_probabilities = clusterer.probabilities_
 
             clustered = (hdbscan_labels >= 0)
 
@@ -314,6 +311,7 @@ def main():
                     
             cluster_df = pd.DataFrame(standard_embedding, columns=('x', 'y'))
             cluster_df['cluster'] = [str(x) for x in hdbscan_labels]
+            cluster_df['probabilities'] = hdbscan_probabilities
             if color_this_col != 'None':
                 cluster_df['color by ' + color_this_col] = scaled_df[color_this_col]
                 different_labels = list(set(scaled_df[color_this_col]))
