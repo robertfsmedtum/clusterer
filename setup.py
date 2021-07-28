@@ -18,6 +18,7 @@ setup(
       'streamlit',
       'pandas',
       'umap-learn',
+      'pacmap',
       'numba',
       'scipy',
       'hdbscan',
@@ -26,8 +27,7 @@ setup(
       'matplotlib',
       'bokeh==2.2.2',
       'decorator==4.4.2',
-      'networkx==2.5.1',
-      'wordcloud'
+      'networkx==2.5.1'
   ],
   classifiers=[
     'Development Status :: 4 - Beta',

@@ -6,6 +6,7 @@ def main():
     import hdbscan
     import copy
     import scipy
+    import pacmap
     import streamlit as st
     from sklearn.preprocessing import StandardScaler
     from sklearn.metrics.pairwise import pairwise_distances
@@ -19,22 +20,30 @@ def main():
     import networkx as nx
     import matplotlib.pyplot as plt
     from networkx.algorithms import community
-    from wordcloud import WordCloud
+    # from wordcloud import WordCloud
 
     results_max_n = 3
     results_text = ''
 
-    default_number_of_neighbors = 20 # 15 # 20 # 5
-    default_minimum_samples = 5 # 5 # 10 # 5
-    default_minimum_cluster_size = 20 # 20 # 30 # 50
-    default_selection_epsilon = 0.0
+    ### Reduction of dimensions and parameters
+    dimension_reduction_method_default = 0 # 1 = PacMAP, 0 = UMAP
+    remaining_dimensions = 2
+
+    ### PaCMAP
+    mn_ratio_default=5.0
+    fp_ratio_default=10.0
+
+    ### UMAP
+    default_number_of_neighbors = 20 # 20 # 15 # 20 # 5
+    minimum_distance = 0.0
+
+    ### Transformation of dataset
     standard_scalar_default = 0 # 1 = Yes, 0 = No
     pairwisedistance_default = 0 # 1 = Yes, 0 = No
+
+    ### Cluster settings for network and value counts
     default_maximum_number_of_nodes = 20
     densemap_default = 0
-
-    remaining_dimensions = 2
-    minimum_distance = 0.0
 
     random_seed = 42
 
@@ -47,15 +56,15 @@ def main():
         "DEBUG": False,
         "input": "./data.csv",
         "save_graph": True,
-        # "options": {
-        #     'data': [1]
-        # }
+        "options": {
+            'data': [1]
+        }
     }
 
     st.set_option('deprecation.showPyplotGlobalUse', False)
 
     st.set_page_config(
-        page_title="UMAP and HDBSCAN for network analysis",
+        page_title="High dimension clusterer",
         page_icon="🕸",
         layout="centered",
         initial_sidebar_state="auto",
@@ -106,8 +115,8 @@ def main():
         return f'<a href="data:file/txt;base64,{b64}" download="{download_filename}">{download_link_text}</a>'
 
     st.write("""
-    # 🕸 UHC - Network analysis v1.0
-    **for higher dimensional data using UMAP¹ and HDBSCAN²𝄒³**
+    # 🕸 High Dimension Clusterer v0.1
+    **for higher dimensional data using UMAP¹/PaCMAP² and HDBSCAN³𝄒⁴**
     """)
 
     uploaded_file = st.sidebar.file_uploader("📂 Select a file (csv or excel)")
@@ -157,6 +166,23 @@ def main():
         original_mean_ci = mean_confidence_interval(df_raw.T.sum())
         col4.write('_{:.2f} +/- {:.2f} [95% CI]_'.format(original_mean_ci[0], original_mean_ci[1]))
 
+        dimension_reduction_method = st.sidebar.radio(
+            'Use the following dimension reduction method',
+            ['UMAP', 'PaCMAP'],
+            dimension_reduction_method_default
+        )
+
+        if dimension_reduction_method == 'UMAP':
+            ### HDBSCAN
+            default_minimum_samples = 5 # 5 # 5 # 10 # 5
+            default_minimum_cluster_size = 15 # 20 # 20 # 30 # 50
+            default_selection_epsilon = 0.0
+        else:
+            ### HDBSCAN
+            default_minimum_samples = 5 # 5 # 5 # 10 # 5
+            default_minimum_cluster_size = 40 # 30 # 20 # 20 # 30 # 50
+            default_selection_epsilon = 0.0
+
         with st.sidebar.beta_expander("Filtering data (optional)"):
             options_col_to_exclude = st.multiselect(
                 'Excluding selected columns.',
@@ -185,27 +211,35 @@ def main():
 
 
         with st.sidebar.beta_expander("Show additional settings"):
-            metric = st.selectbox(
-                "What metric do you want to use in UMAP?",
-                (
-                    "manhattan",
-                    "euclidean",
-                    "chebyshev",
-                    "canberra",
-                    "braycurtis",
-                    "haversine",
-                    "hamming",
-                    "jaccard",
-                    "dice",
-                    "russellrao",
-                    "kulsinski",
-                    "rogerstanimoto",
-                    "sokalmichener",
-                    "sokalsneath",
-                    "yule"
-                ))
+            if dimension_reduction_method == 'UMAP':
+                metric = st.selectbox(
+                    "What metric do you want to use in UMAP?",
+                    (
+                        "euclidean",
+                        "manhattan",
+                        "chebyshev",
+                        "canberra",
+                        "braycurtis",
+                        "haversine",
+                        "hamming",
+                        "jaccard",
+                        "dice",
+                        "russellrao",
+                        "kulsinski",
+                        "rogerstanimoto",
+                        "sokalmichener",
+                        "sokalsneath",
+                        "yule"
+                    ))
+            else:
+                metric = "euclidean"
 
-            number_of_neighbors = st.slider('Minimum number of neighbors (UMAP)', 2, 100, default_number_of_neighbors, step=1)
+            if dimension_reduction_method == 'UMAP':
+                number_of_neighbors = st.slider('Minimum number of neighbors (UMAP)', 2, 100, default_number_of_neighbors, step=1)
+            else:
+                mn_ratio = st.slider('Mid-near pairs to neighbors ratio (PaCMAP)', 0.0, 20.0, mn_ratio_default, step=0.1, format=f"%1f")
+                fp_ratio = st.slider('Further pairs to neighbors ratio (PaCMAP)', 0.0, 20.0, fp_ratio_default, step=0.1, format=f"%1f")
+                number_of_neighbors = None
             minimum_samples = st.slider('Minimum number of samples (HDBSCAN)', 1, 100, default_minimum_samples, step=1)
             minimum_cluster_size = st.slider('Minimum cluster size (HDBSCAN)', 2, 100, default_minimum_cluster_size, step=1)
             cluster_selection_epsilon = st.slider('Cluster selection minimum (HDBSCAN)', 0.0, 2.0, default_selection_epsilon, step=0.1, format=f"%1f")
@@ -231,10 +265,13 @@ def main():
             )
 
         if st.sidebar.button('▶️ Start analysis') or DEBUG_OPTIONS["DEBUG"] or st.session_state.started:
-            new_values = st.sidebar.multiselect(
-                'Select values for new prediction.',
-                df_cols
-            )
+            if dimension_reduction_method == 'UMAP':
+                new_values = st.sidebar.multiselect(
+                    'Select values for new prediction.',
+                    df_cols
+                )
+            else:
+                new_values = ''
 
             st.session_state['started'] = True
             df = df_raw.copy()
@@ -274,9 +311,19 @@ def main():
                     densmap=use_densemap
                     ).fit(input_df)
 
-            use_densemap = True if densemap == 'Yes' else False
-            trans = calculate_umap(number_of_neighbors, scaled_df, minimum_distance, use_densemap)
-            standard_embedding = trans.transform(scaled_df)
+            @st.cache
+            def calculate_pacmap(input_df, mn_ratio, fp_ratio, number_of_neighbors):
+                X = np.array(input_df)
+                # X = X.reshape(X.shape[0], -1)
+                embedding = pacmap.PaCMAP(n_dims=2, MN_ratio=mn_ratio, FP_ratio=fp_ratio, n_neighbors=number_of_neighbors) # , MN_ratio=0.5, FP_ratio=2.0) 
+                return embedding.fit_transform(X, init="pca")
+
+            if dimension_reduction_method == 'UMAP':
+                use_densemap = True if densemap == 'Yes' else False
+                trans = calculate_umap(number_of_neighbors, scaled_df, minimum_distance, use_densemap)
+                standard_embedding = trans.transform(scaled_df)
+            else:
+                standard_embedding = calculate_pacmap(scaled_df, mn_ratio, fp_ratio, number_of_neighbors)
 
             @st.cache
             def calculate_hdbscan(input_metric, input_min_samples, input_min_cluster_size, input_standard_embedding, cluster_selection_epsilon):
@@ -398,17 +445,22 @@ def main():
                 )
                 plot_figure.add_layout(color_bar, 'right')
 
-            plot_figure.add_layout(Title(text='metric: {}, number of neighbors: {}, minimum sample size: {}, minimum cluster size: {}'.format(
-                    new_input_metric, number_of_neighbors, minimum_samples, minimum_cluster_size
-                ), text_font_style="italic"), 'above')
+            if dimension_reduction_method == 'UMAP':
+                plot_figure.add_layout(Title(text='metric: {}, number of neighbors: {}, minimum sample size: {}, minimum cluster size: {}'.format(
+                        new_input_metric, number_of_neighbors, minimum_samples, minimum_cluster_size
+                    ), text_font_style="italic"), 'above')
+            else:
+                plot_figure.add_layout(Title(text='MN_ratio: {}, FP_ratio: {}, minimum sample size: {}, minimum cluster size: {}'.format(
+                        mn_ratio, fp_ratio, minimum_samples, minimum_cluster_size
+                    ), text_font_style="italic"), 'above')
 
             if color_this_col != 'None':
-                    plot_figure.add_layout(Title(text="UMAP projection colored in {} different {} values".format(len(different_labels), color_this_col), text_font_size="16pt"), 'above')
+                    plot_figure.add_layout(Title(text=dimension_reduction_method + " projection colored in {} different {} values".format(len(different_labels), color_this_col), text_font_size="16pt"), 'above')
             else:
                 if True in clustered:
-                    plot_figure.add_layout(Title(text="UMAP projection with {} color-separated clusters".format(len(different_labels)-1), text_font_size="16pt"), 'above')
+                    plot_figure.add_layout(Title(text=dimension_reduction_method + " projection with {} color-separated clusters".format(len(different_labels)-1), text_font_size="16pt"), 'above')
                 else:
-                    plot_figure.add_layout(Title(text="UMAP projection with no separated clusters", text_font_size="16pt"), 'above')
+                    plot_figure.add_layout(Title(text=dimension_reduction_method + " projection with no separated clusters", text_font_size="16pt"), 'above')
 
             st.bokeh_chart(plot_figure, use_container_width=True)
 
@@ -427,21 +479,21 @@ def main():
                 sorted_counts = counts.most_common(20)
 
                 add_to_results = ''
-                if cluster != '-1':
-                    add_to_results += 'In cluster {}, the most common diseases were '.format(cluster)
-                    for i in range(results_max_n):
-                        if i == max(range(results_max_n)):
-                            add_to_results = add_to_results[:-2]
-                            add_to_results += ' and '
-                        add_to_results += "'{}' (n={}), ".format(sorted_counts[i][0], sorted_counts[i][1])
-                else:
-                    add_to_results += 'The most common diseases for the unclassified patients were '.format(cluster)
-                    for i in range(results_max_n):
-                        if i == max(range(results_max_n)):
-                            add_to_results = add_to_results[:-2]
-                            add_to_results += ' and '
-                        add_to_results += "'{}' (n={}), ".format(sorted_counts[i][0], sorted_counts[i][1])
-
+                if len(sorted_counts) > 0:
+                    if cluster != '-1':
+                        add_to_results += 'In cluster {}, the most common diseases were '.format(cluster)
+                        for i in range(results_max_n):
+                            if i == max(range(results_max_n)):
+                                add_to_results = add_to_results[:-2]
+                                add_to_results += ' and '
+                            add_to_results += "'{}' (n={}), ".format(sorted_counts[i][0], sorted_counts[i][1])
+                    else:
+                        add_to_results += 'The most common diseases for the unclassified patients were '.format(cluster)
+                        for i in range(results_max_n):
+                            if i == max(range(results_max_n)):
+                                add_to_results = add_to_results[:-2]
+                                add_to_results += ' and '
+                            add_to_results += "'{}' (n={}), ".format(sorted_counts[i][0], sorted_counts[i][1])
                 items_to_add.append(add_to_results)
 
                 toplist = ['{:03d}'.format(item[1]) + ': ' + item[0] for item in sorted_counts]
@@ -489,7 +541,10 @@ def main():
                     else:
                         edgeweights[comb] = 1
             
-            sdf = cluster_df[cluster_df['cluster'] == str(cluster)]
+            sdf = cluster_df[cluster_df['cluster'] == str(cluster)].copy()
+
+            if not any(list(sdf['values'])):
+                sdf['values'] = [['None'] for _ in sdf.index]
             sdf['values'].apply(lambda x: create_network(x))
 
             nodeweights = {k: v for k, v in sorted(nodeweights.items(), key=lambda item: item[1], reverse=True)[:maximum_number_of_nodes]}
@@ -658,18 +713,35 @@ def main():
             plt.title('Cluster hierarchy dendrogram')
             st.pyplot(fig)
 
-            if cluster in all_counts:
-                wordcloud = WordCloud(
-                    background_color="white", 
-                    max_words=200, 
-                    contour_width=3, 
-                    contour_color='steelblue',
-                    width=int(1000*8/10),
-                    height=int(618*8/10)
-                    )
-                wordcloud.generate_from_frequencies(dict(all_counts[cluster]))
+            # if cluster in all_counts:
+            #     wordcloud = WordCloud(
+            #         background_color="white", 
+            #         max_words=200, 
+            #         contour_width=3, 
+            #         contour_color='steelblue',
+            #         width=int(1000*8/10),
+            #         height=int(618*8/10)
+            #         )
+            #     wordcloud.generate_from_frequencies(dict(all_counts[cluster]))
 
-                st.image(wordcloud.to_image(), width=None)
+            #     st.image(wordcloud.to_image(), width=None)
+
+            if dimension_reduction_method == 'UMAP':
+                dimension_reduction_text = 'Uniform Manifold Approximation and Projection (UMAP)'
+                dimension_reduction_parameters = 'with given parameters (n_neighbors={}, min_dist={}) '.format(
+                    number_of_neighbors,
+                    int(minimum_distance) if float(minimum_distance).is_integer() else minimum_distance,
+                )
+                metric_text = 'We used {} as a distance metric as suggested by Aggarwal, Hinneburg et Keim⁴ for higher dimensional data.'.format(metric)
+                dimension_reduction_citation = 'McInnes, L., Healy, J., Saul, N. & Großberger, L. UMAP: uniform manifold approximation and projection. J. Open Source Softw. 3, 861 (2018).'
+            else:
+                dimension_reduction_text = 'Pairwise Controlled Manifold Approximation (PaCMAP)'
+                dimension_reduction_parameters = 'with given parameters (MN_ratio={}, FP_ratio={}) '.format(
+                    int(mn_ratio) if float(mn_ratio).is_integer() else mn_ratio,
+                    int(fp_ratio) if float(fp_ratio).is_integer() else fp_ratio,
+                )                
+                metric_text = ''
+                dimension_reduction_citation = 'Yingfan Wang, , Haiyang Huang, Cynthia Rudin, and Yaron Shaposhnik. "Understanding How Dimension Reduction Tools Work: An Empirical Approach to Deciphering t-SNE, UMAP, TriMAP, and PaCMAP for Data Visualization." (2020).'
 
             with st.beta_expander("Results"):
                 st.info('''
@@ -683,28 +755,25 @@ def main():
                     consits of {} different dimensions and {} rows. The average number of 
                     diseases was {:.2f} +/- {:.2f} [95% CI].
 
-                    After performing Uniform Manifold Approximation and Projection (UMAP)¹ with given parameters
-                    (n_neighbors={}, min_dist={}) for dimension reduction, each row of the dataset is a {}-dimensional 
-                    representation of the corresponding patients.
+                    After performing {}¹ {}for dimension reduction, each row of the dataset became a {}-dimensional 
+                    representation of the corresponding patient.
 
                     Next, a high performance implementation² of
                     Hierarchical Density-Based Spatial Clustering of Applications with Noise (HDBSCAN)³ 
                     was utilized, which uses unsupervised learning to find clusters (= dense regions) within
                     the dataset. After visual exploration of the {}-dimensional representation and the cluster hierarchy dendrogram (Supp. Fig. 1), 
                     we set the parameters (min_samples={}, min_cluster_size={}, cluster_selection_epsilon={}) to get the best fit of the projected dense regions.
-
-                    We used {} as a distance metric as suggested by Aggarwal, Hinneburg et Keim⁴ for higher dimensional data.
-
-                    For reproducibility, all stochastic calculations were obtained with fixed random seed of {}.
+                    {}
+                    For reproducibility a random seed of {} was set.
                     
                     **Results**\n
-                    After performing UMAP dimension reduction and HDBSCAN clustering, we found {} different clusters.
-                    {} ({:.2f}%) patients remain unclassified.
+                    After performing {} dimension reduction and HDBSCAN clustering, we found {} different clusters.
+                    {} ({:.2f}%) patients were not assigned to any cluster.
                     
                     {}
 
                     **Citations**\n
-                    ¹ McInnes, L., Healy, J., Saul, N. & Großberger, L. UMAP: uniform manifold approximation and projection. J. Open Source Softw. 3, 861 (2018).\n
+                    ¹ {}\n
                     ² L. McInnes, J. Healy, S. Astels, hdbscan: Hierarchical density based clustering In: Journal of Open Source Software, The Open Journal, volume 2, number 11. 2017.\n 
                     ³ Campello R.J.G.B., Moulavi D., Sander J. (2013) Density-Based Clustering Based on Hierarchical Density Estimates. In: Pei J., Tseng V.S., Cao L., Motoda H., Xu G. (eds) Advances in Knowledge Discovery and Data Mining. PAKDD 2013. Lecture Notes in Computer Science, vol 7819. Springer, Berlin, Heidelberg.\n
                     ⁴ Aggarwal C.C., Hinneburg A., Keim D.A. (2001) On the Surprising Behavior of Distance Metrics in High Dimensional Space. In: Van den Bussche J., Vianu V. (eds) Database Theory — ICDT 2001. ICDT 2001. Lecture Notes in Computer Science, vol 1973. Springer, Berlin, Heidelberg. https://doi.org/10.1007/3-540-44503-X_27
@@ -719,19 +788,21 @@ def main():
                     len(df),
                     filtered_mean_ci[0], 
                     filtered_mean_ci[1],
-                    number_of_neighbors,
-                    int(minimum_distance) if float(minimum_distance).is_integer() else minimum_distance,
+                    dimension_reduction_text,
+                    dimension_reduction_parameters,
                     remaining_dimensions,
                     remaining_dimensions,
                     minimum_samples,
                     minimum_cluster_size,
                     int(cluster_selection_epsilon) if float(cluster_selection_epsilon).is_integer() else cluster_selection_epsilon,
-                    metric,
+                    metric_text,
                     random_seed,
+                    dimension_reduction_method,
                     len(different_labels)-1,
                     len(cluster_df[cluster_df['cluster'] == '-1']),
                     100*len(cluster_df[cluster_df['cluster'] == '-1'])/len(df),
-                    results_text
+                    results_text,
+                    dimension_reduction_citation
                     ))
 
             with st.beta_expander("Raw dataframe"):
@@ -768,8 +839,9 @@ def main():
     st.write("""
     ### **Citations**
     ¹ McInnes, L., Healy, J., Saul, N. & Großberger, L. UMAP: uniform manifold approximation and projection. J. Open Source Softw. 3, 861 (2018).\n
-    ² L. McInnes, J. Healy, S. Astels, hdbscan: Hierarchical density based clustering In: Journal of Open Source Software, The Open Journal, volume 2, number 11. 2017.\n
-    ³ Campello R.J.G.B., Moulavi D., Sander J. (2013) Density-Based Clustering Based on Hierarchical Density Estimates. In: Pei J., Tseng V.S., Cao L., Motoda H., Xu G. (eds) Advances in Knowledge Discovery and Data Mining. PAKDD 2013. Lecture Notes in Computer Science, vol 7819. Springer, Berlin, Heidelberg.\n
+    ² Yingfan Wang, , Haiyang Huang, Cynthia Rudin, and Yaron Shaposhnik. "Understanding How Dimension Reduction Tools Work: An Empirical Approach to Deciphering t-SNE, UMAP, TriMAP, and PaCMAP for Data Visualization." (2020).\n
+    ³ L. McInnes, J. Healy, S. Astels, hdbscan: Hierarchical density based clustering In: Journal of Open Source Software, The Open Journal, volume 2, number 11. 2017.\n
+    ⁴ Campello R.J.G.B., Moulavi D., Sander J. (2013) Density-Based Clustering Based on Hierarchical Density Estimates. In: Pei J., Tseng V.S., Cao L., Motoda H., Xu G. (eds) Advances in Knowledge Discovery and Data Mining. PAKDD 2013. Lecture Notes in Computer Science, vol 7819. Springer, Berlin, Heidelberg.
     """)
 
 
