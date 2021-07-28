@@ -2,6 +2,9 @@
 ## TODO Better network graph
 ## TODO Nodes to export to networkx
 
+from numpy.ma.core import minimum
+
+
 def main():
     import os
     import pandas as pd
@@ -25,7 +28,8 @@ def main():
     from networkx.algorithms import community
     from wordcloud import WordCloud
 
-    np.random.seed(42)
+    results_max_n = 3
+    results_text = ''
 
     default_number_of_neighbors = 20 # 15 # 20 # 5
     default_minimum_samples = 5 # 5 # 10 # 5
@@ -35,15 +39,22 @@ def main():
     pairwisedistance_default = 0 # 1 = Yes, 0 = No
     default_maximum_number_of_nodes = 20
 
+    remaining_dimensions = 2
+    minimum_distance = 0.0
+
+    random_seed = 42
+
+    np.random.seed()
+
     if 'started' not in st.session_state:
         st.session_state.started = False
 
     DEBUG_OPTIONS = {
-        "DEBUG": False,
+        "DEBUG": True,
         "input": "./data.csv",
         "save_graph": True,
         # "options": {
-        #     'col': [1]
+        #     'data': [1]
         # }
     }
 
@@ -255,15 +266,15 @@ def main():
                 scaled_df = pairwise_distances(scaled_df)
 
             @st.cache
-            def calculate_umap(n_o_n, input_df):
+            def calculate_umap(n_o_n, input_df, minimum_distance):
                 return umap.UMAP(
                     n_neighbors=n_o_n,
-                    min_dist=0.0,
-                    n_components=2,
-                    random_state=42
+                    min_dist=minimum_distance,
+                    n_components=remaining_dimensions,
+                    random_state=random_seed
                     ).fit(input_df)
 
-            trans = calculate_umap(number_of_neighbors, scaled_df)
+            trans = calculate_umap(number_of_neighbors, scaled_df, minimum_distance)
             standard_embedding = trans.transform(scaled_df)
 
             @st.cache
@@ -402,14 +413,41 @@ def main():
             all_clusters = sorted(list(set(list(cluster_df['cluster']))))
             all_counts = {}
 
+            items_to_add = []
+
             for cluster in all_clusters:
                 # if int(cluster) >= 0:
                 sdf = cluster_df[cluster_df['cluster'] == cluster]
                 counts = Counter([item for inner in list(sdf['values']) for item in inner])
                 all_counts[cluster] = counts
                 sorted_counts = counts.most_common(20)
+
+                add_to_results = ''
+                if cluster != '-1':
+                    add_to_results += 'In cluster {}, the most common diseases were '.format(cluster)
+                    for i in range(results_max_n):
+                        if i == max(range(results_max_n)):
+                            add_to_results = add_to_results[:-2]
+                            add_to_results += ' and '
+                        add_to_results += "'{}' (n={}), ".format(sorted_counts[i][0], sorted_counts[i][1])
+                else:
+                    add_to_results += 'The most common diseases for the unclassified patients were '.format(cluster)
+                    for i in range(results_max_n):
+                        if i == max(range(results_max_n)):
+                            add_to_results = add_to_results[:-2]
+                            add_to_results += ' and '
+                        add_to_results += "'{}' (n={}), ".format(sorted_counts[i][0], sorted_counts[i][1])
+
+                items_to_add.append(add_to_results)
+
                 toplist = ['{:03d}'.format(item[1]) + ': ' + item[0] for item in sorted_counts]
                 countdf['Cluster ' + str(cluster)] = pd.Series(toplist, dtype=str)
+
+            items_to_add = items_to_add[1:] + [items_to_add[0]]
+
+            for i, item in enumerate(items_to_add):
+                item = item[:-2]
+                results_text += item + '. '
 
             # # cluster = 1
             if len(all_clusters) > 1:
@@ -630,6 +668,69 @@ def main():
 
                 st.image(wordcloud.to_image(), width=None)
 
+            with st.beta_expander("Results"):
+                st.info('''
+                    **Methods**\n
+
+                    The raw dataset of contains {} different dimensions (= disease entities) with
+                    binary values (0 = no disease, 1 = disease) and {} rows (= different patients).
+                    The average number of diseases was {:.2f} +/- {:.2f} [95% CI].
+                    
+                    After filtering the {} column, the remaining dataset
+                    consits of {} different dimensions and {} rows. The average number of 
+                    diseases was {:.2f} +/- {:.2f} [95% CI].
+
+                    After performing Uniform Manifold Approximation and Projection (UMAP)¹ with given parameters
+                    (n_neighbors={}, min_dist={}) for dimension reduction, each row of the dataset is a {}-dimensional 
+                    representation of the corresponding patients.
+
+                    Next, a high performance implementation² of
+                    Hierarchical Density-Based Spatial Clustering of Applications with Noise (HDBSCAN)³ 
+                    was utilized, which uses unsupervised learning to find clusters (= dense regions) within
+                    the dataset. After visual exploration of the {}-dimensional representation, we set the parameters
+                    (min_samples={}, min_cluster_size={}, cluster_selection_epsilon={}) to get the best fit of the projected dense regions.
+
+                    We used {} as a distance metric as suggested by Aggarwal, Hinneburg et Keim⁴ for higher dimensional data.
+
+                    For reproducibility, all stochastic calculations were obtained with fixed random seed of {}.
+                    
+                    **Results**\n
+                    After performing UMAP dimension reduction and HDBSCAN clustering, we found {} different clusters.
+                    {} ({:.2f}%) patients remain unclassified.
+                    
+                    {}
+
+                    **Citations**\n
+                    ¹ McInnes, L., Healy, J., Saul, N. & Großberger, L. UMAP: uniform manifold approximation and projection. J. Open Source Softw. 3, 861 (2018).\n
+                    ² L. McInnes, J. Healy, S. Astels, hdbscan: Hierarchical density based clustering In: Journal of Open Source Software, The Open Journal, volume 2, number 11. 2017.\n 
+                    ³ Campello R.J.G.B., Moulavi D., Sander J. (2013) Density-Based Clustering Based on Hierarchical Density Estimates. In: Pei J., Tseng V.S., Cao L., Motoda H., Xu G. (eds) Advances in Knowledge Discovery and Data Mining. PAKDD 2013. Lecture Notes in Computer Science, vol 7819. Springer, Berlin, Heidelberg.\n
+                    ⁴ Aggarwal C.C., Hinneburg A., Keim D.A. (2001) On the Surprising Behavior of Distance Metrics in High Dimensional Space. In: Van den Bussche J., Vianu V. (eds) Database Theory — ICDT 2001. ICDT 2001. Lecture Notes in Computer Science, vol 1973. Springer, Berlin, Heidelberg. https://doi.org/10.1007/3-540-44503-X_27
+
+                '''.format(
+                    len(df_cols), 
+                    len(df_raw),
+                    original_mean_ci[0], 
+                    original_mean_ci[1],
+                    ' '.join(options.keys()),
+                    len(df.columns),
+                    len(df),
+                    filtered_mean_ci[0], 
+                    filtered_mean_ci[1],
+                    number_of_neighbors,
+                    minimum_distance,
+                    remaining_dimensions,
+                    remaining_dimensions,
+                    minimum_samples,
+                    minimum_cluster_size,
+                    cluster_selection_epsilon,
+                    metric,
+                    random_seed,
+                    len(different_labels)-1,
+                    len(cluster_df[cluster_df['cluster'] == '-1']),
+                    100*len(cluster_df[cluster_df['cluster'] == '-1'])/len(df),
+                    results_text
+                    ))
+
             with st.beta_expander("Raw dataframe"):
                 st.write(df)
                 st.markdown(download_link(df, 'df_raw.csv', 'Download raw dataset'), unsafe_allow_html=True)
@@ -665,7 +766,7 @@ def main():
     ### **Citations**
     ¹ McInnes, L., Healy, J., Saul, N. & Großberger, L. UMAP: uniform manifold approximation and projection. J. Open Source Softw. 3, 861 (2018).\n
     ² L. McInnes, J. Healy, S. Astels, hdbscan: Hierarchical density based clustering In: Journal of Open Source Software, The Open Journal, volume 2, number 11. 2017
-    # """)
+    """)
 
 
 if __name__ == "__main__":
