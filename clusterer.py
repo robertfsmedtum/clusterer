@@ -124,8 +124,9 @@ def main():
     if (uploaded_file is None and not DEBUG_OPTIONS["DEBUG"]) and 'df_raw' not in st.session_state:
         st.write("""
             ## **Instructions**
-            With the High Dimension Clusterer (HDC) you can choose a csv or excel file containing columns of binary,
-            categorical or numerical data. You can change the parameters or start the analysis right away.\n
+            The High Dimension Clusterer (HDC) lets you analyze higher dimensional datasets in the form of
+            csv or excel files containing columns of binary, categorical or numerical data.\n
+            After you haven chosen your dataset, you can tune the parameters or start the analysis right away.\n
             *Note that this is a local application which works offline when using with a localhost adress.*
             *The provided datasets do **not** get uploaded and you can stay offline after the application first loaded.*\n
             When you use the streamlit hosted version, see https://streamlit.io/privacy-policy for details: \n
