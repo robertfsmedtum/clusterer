@@ -494,8 +494,8 @@ def main():
                 mytitle = "Value counts in cluster {}".format(cluster)
             else:
                 mytitle = "Value counts of unclustered data"
-            p_node = figure(y_range=labels, title=mytitle,
-                toolbar_location=None, plot_height=maximum_number_of_nodes*20)
+            p_node = figure(y_range=labels, tools=('pan, wheel_zoom, reset, save'), 
+                title=mytitle, plot_height=maximum_number_of_nodes*20)
             p_node.hbar(y=labels, right=counts, color=clustercolors[int(cluster)], height=0.618)
             p_node.title.text_color = clustercolors[int(cluster)]
 
@@ -652,7 +652,7 @@ def main():
 
             fig, ax = plt.subplots()
             clusterer.condensed_tree_.plot(select_clusters=True, selection_palette=list(clustercolors.values())[1:], axis=ax)            
-            plt.title('Cluster hierarchy as dendrogram')
+            plt.title('Cluster hierarchy dendrogram')
             st.pyplot(fig)
 
             if cluster in all_counts:
@@ -687,8 +687,8 @@ def main():
                     Next, a high performance implementation² of
                     Hierarchical Density-Based Spatial Clustering of Applications with Noise (HDBSCAN)³ 
                     was utilized, which uses unsupervised learning to find clusters (= dense regions) within
-                    the dataset. After visual exploration of the {}-dimensional representation, we set the parameters
-                    (min_samples={}, min_cluster_size={}, cluster_selection_epsilon={}) to get the best fit of the projected dense regions.
+                    the dataset. After visual exploration of the {}-dimensional representation and the cluster hierarchy dendrogram (Supp. Fig. 1), 
+                    we set the parameters (min_samples={}, min_cluster_size={}, cluster_selection_epsilon={}) to get the best fit of the projected dense regions.
 
                     We used {} as a distance metric as suggested by Aggarwal, Hinneburg et Keim⁴ for higher dimensional data.
 
