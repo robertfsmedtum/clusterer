@@ -181,7 +181,7 @@ def main():
         else:
             ### HDBSCAN
             default_minimum_samples = 5 # 5 # 5 # 10 # 5
-            default_minimum_cluster_size = 40 # 30 # 20 # 20 # 30 # 50
+            default_minimum_cluster_size = 30 # 30 # 20 # 20 # 30 # 50
             default_selection_epsilon = 0.0
 
         with st.sidebar.beta_expander("Filtering data (optional)"):
