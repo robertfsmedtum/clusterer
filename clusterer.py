@@ -11,6 +11,7 @@ def main():
     from bokeh.palettes import Turbo256
     from collections import Counter
     import umap
+    import pynndescent
     import itertools
     import networkx as nx
 
@@ -25,7 +26,7 @@ def main():
 
     DEBUG_OPTIONS = {
         "DEBUG": True,
-        "input": "./data/meta.csv",
+        "input": "./data/data.csv",
         "save_graph": False,
         # "options": {
         #     'psopat': [1]
@@ -34,11 +35,12 @@ def main():
 
     results_max_n = 3
     results_text = ''
+    drop_incomplete_rows_default = 0
 
     n_categories_for_float = 4
     use_bars = True
 
-    default_disabled_modules = []
+    default_disabled_modules = ['Column analysis']
     # default_disabled_modules = ['Wordcloud', 'Dendrogram', 'Results']
     # default_disabled_modules = ['Network graph', 'Wordcloud', 'Dendrogram', 'Results']
     # default_disabled_modules = ['Column analysis', 'Network graph', 'Value counts', 'Dendrogram', 'Wordcloud', 'Results (tables)', 'Results (text)']
@@ -89,8 +91,10 @@ def main():
     )
 
     @st.cache
-    def convert_dataframe(df):
-        df = df.dropna()
+    def convert_dataframe(df, drop_incomplete_rows):
+        if drop_incomplete_rows == 'Yes':
+            df.replace('', np.nan, inplace=True)
+            df.dropna(inplace=True)
         conversion_dicts = {}
         for col in df.columns:
             if df[col].dtype != 'Int64' and df[col].dtype != 'float64':
@@ -130,6 +134,12 @@ def main():
     **for higher dimensional data using UMAP¹/PaCMAP² and HDBSCAN³𝄒⁴**
     """)
 
+    drop_incomplete_rows = st.sidebar.radio(
+        'Drop incomplete rows?',
+        ['Yes', 'No'],
+        drop_incomplete_rows_default
+    )
+
     uploaded_file = st.sidebar.file_uploader("📂 Select a file (csv or excel)")
 
     if (uploaded_file is None and not DEBUG_OPTIONS["DEBUG"]) and 'df_raw' not in st.session_state:
@@ -162,7 +172,7 @@ def main():
                 if 'df_raw' not in st.session_state:
                     st.session_state.df_raw = df_raw
 
-        df_raw, dict_df = convert_dataframe(df_raw)
+        df_raw, dict_df = convert_dataframe(df_raw, drop_incomplete_rows)
 
         df_cols = list(df_raw.columns)
 
@@ -281,14 +291,6 @@ def main():
             )
 
         if st.sidebar.button('▶️ Start analysis') or DEBUG_OPTIONS["DEBUG"] or st.session_state.started:
-            if dimension_reduction_method == 'UMAP':
-                new_values = st.sidebar.multiselect(
-                    'Select values for new prediction.',
-                    df_cols
-                )
-            else:
-                new_values = ''
-
             st.session_state['started'] = True
             df = df_raw.copy()
 
@@ -304,6 +306,27 @@ def main():
             if len(df) == 0:
                 st.warning('Empty dataframe. Please change parameters or upload another dataset.')
                 st.stop()
+
+            if dimension_reduction_method == 'UMAP':
+                # new_values = st.sidebar.multiselect(
+                #     'Select values for new prediction.',
+                #     df_cols
+                # )
+                new_values = {}
+                new_cols = st.sidebar.multiselect(
+                    'Select columns for new prediction.',
+                    df_cols
+                )
+                for new_col in new_cols:
+                    new_values[new_col] = st.sidebar.slider(
+                        'Value for ' + new_col, 
+                        min(df[new_col]), 
+                        max(df[new_col]), 
+                        min(df[new_col]), 
+                        step=0.1 if max(df[new_col]) < 2 else 1.0, 
+                        format=f"%1f" if max(df[new_col]) < 2 else f"%0f")
+            else:
+                new_values = ''
 
             col1.write('**Original**')
             col2.write('_{:,}_'.format(len(df_cols)))
@@ -330,7 +353,7 @@ def main():
             if pairwisedistance == 'Yes':
                 scaled_df = pairwise_distances(scaled_df)
 
-            @st.cache
+            @st.cache(hash_funcs={pynndescent.pynndescent_.NNDescent: lambda _: 1})
             def calculate_umap(n_o_n, input_df, minimum_distance, use_densemap):
                 return umap.UMAP(
                     n_neighbors=n_o_n,
@@ -449,9 +472,11 @@ def main():
             prediction_to_cluster = -2
 
             testdf = pd.DataFrame(columns=scaled_df.columns)
-            testdf.loc[0] = [1 if x in new_values else 0 for x in testdf.columns]
-            test_embedding = trans.transform(testdf)
-            new_predictions = hdbscan.approximate_predict(clusterer, test_embedding)
+            if len(new_values) > 0:
+                new_values = { k: (new_values[k] if k in new_values else min(scaled_df[k])) for k in testdf.columns }
+                testdf.loc[0] = [new_values[key] if key in new_values else min(scaled_df[key]) for key in testdf.columns]
+                test_embedding = trans.transform(testdf)
+                new_predictions = hdbscan.approximate_predict(clusterer, test_embedding)
 
             create_cluster_graph_widget(
                 color_this_col,

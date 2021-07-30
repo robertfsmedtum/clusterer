@@ -68,6 +68,8 @@ def create_cluster_graph_widget(
 
         if len(new_values) > 0:
             cluster_df_new = pd.DataFrame(test_embedding, columns=('x', 'y'))
+            if color_this_col != 'by cluster':
+                cluster_df_new['color by ' + color_this_col] = new_values[color_this_col]
             cluster_df_new['cluster'] = pd.Series(new_predictions[0])
             cluster_df_new['values'] = testdf.apply(lambda x: return_value_list(x, values), axis=1)
             datasource_new = ColumnDataSource(cluster_df_new)
