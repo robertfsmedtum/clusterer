@@ -25,11 +25,11 @@ def main():
     from widgets.cluster_graph import create_cluster_graph_widget
 
     DEBUG_OPTIONS = {
-        "DEBUG": True,
+        "DEBUG": False,
         "input": "./data/data.csv",
         "save_graph": False,
         # "options": {
-        #     'psopat': [1]
+        #     'data': [1]
         # }
     }
 
@@ -40,10 +40,7 @@ def main():
     n_categories_for_float = 4
     use_bars = True
 
-    default_disabled_modules = ['Column analysis']
-    # default_disabled_modules = ['Wordcloud', 'Dendrogram', 'Results']
-    # default_disabled_modules = ['Network graph', 'Wordcloud', 'Dendrogram', 'Results']
-    # default_disabled_modules = ['Column analysis', 'Network graph', 'Value counts', 'Dendrogram', 'Wordcloud', 'Results (tables)', 'Results (text)']
+    default_disabled_modules = ['Column analysis', 'Wordcloud']
     module_list = ['Column analysis', 'Network graph', 'Value counts', 'Dendrogram', 'Wordcloud', 'Results (tables)', 'Results (text)']
     
     if n_categories_for_float == 4 and use_bars:
@@ -78,13 +75,10 @@ def main():
     if 'started' not in st.session_state:
         st.session_state.started = False
 
-    ## TODO progress like: ▁ ▂ ▃ ▄ ▅ ▆ ▇ █
-    ## TODO progress like: ▂ ▄ ▆ █
-
     st.set_option('deprecation.showPyplotGlobalUse', False)
 
     st.set_page_config(
-        page_title="High dimension clusterer",
+        page_title="High Dimension Clusterer",
         page_icon="🕸",
         layout="centered",
         initial_sidebar_state="auto",
@@ -130,7 +124,7 @@ def main():
         return m, h
 
     st.write("""
-    # 🕸 High Dimension Clusterer v0.1
+    # 🕸 High Dimension Clusterer v1.0
     **for higher dimensional data using UMAP¹/PaCMAP² and HDBSCAN³𝄒⁴**
     """)
 
@@ -185,7 +179,7 @@ def main():
         column_analysis = st.empty()
 
         dimension_reduction_method = st.sidebar.radio(
-            'Use the following dimension reduction method',
+            'Dimension reduction method',
             ['UMAP', 'PaCMAP'],
             dimension_reduction_method_default
         )
@@ -314,17 +308,21 @@ def main():
                 # )
                 new_values = {}
                 new_cols = st.sidebar.multiselect(
-                    'Select columns for new prediction.',
+                    'Select columns for new prediction',
                     df_cols
                 )
                 for new_col in new_cols:
                     new_values[new_col] = st.sidebar.slider(
                         'Value for ' + new_col, 
-                        min(df[new_col]), 
-                        max(df[new_col]), 
-                        min(df[new_col]), 
-                        step=0.1 if max(df[new_col]) < 2 else 1.0, 
-                        format=f"%1f" if max(df[new_col]) < 2 else f"%0f")
+                        0, 1, 0
+                        # min(df[new_col]), 
+                        # max(df[new_col]), 
+                        # min(df[new_col]),
+                        # step = 0.1,
+                        # format=f"%1f"
+                        # step = 0.1 if max(df[new_col]) < 1 else 1, 
+                        # format = f"%1f" if max(df[new_col]) < 1 else f"%0f"
+                    )
             else:
                 new_values = ''
 
@@ -353,15 +351,25 @@ def main():
             if pairwisedistance == 'Yes':
                 scaled_df = pairwise_distances(scaled_df)
 
-            @st.cache(hash_funcs={pynndescent.pynndescent_.NNDescent: lambda _: 1})
-            def calculate_umap(n_o_n, input_df, minimum_distance, use_densemap):
-                return umap.UMAP(
-                    n_neighbors=n_o_n,
-                    min_dist=minimum_distance,
-                    n_components=remaining_dimensions,
-                    random_state=random_seed,
-                    densmap=use_densemap
-                    ).fit(input_df)
+            if new_values == '':
+                @st.cache(hash_funcs={pynndescent.pynndescent_.NNDescent: lambda _: 1})
+                def calculate_umap(n_o_n, input_df, minimum_distance, use_densemap):
+                    return umap.UMAP(
+                        n_neighbors=n_o_n,
+                        min_dist=minimum_distance,
+                        n_components=remaining_dimensions,
+                        random_state=random_seed,
+                        densmap=use_densemap
+                        ).fit(input_df)
+            else:
+                def calculate_umap(n_o_n, input_df, minimum_distance, use_densemap):
+                    return umap.UMAP(
+                        n_neighbors=n_o_n,
+                        min_dist=minimum_distance,
+                        n_components=remaining_dimensions,
+                        random_state=random_seed,
+                        densmap=use_densemap
+                        ).fit(input_df)
 
             @st.cache
             def calculate_pacmap(input_df, mn_ratio, fp_ratio, number_of_neighbors):
@@ -398,7 +406,6 @@ def main():
             if True not in clustered:
                 st.warning('Did not find any clusters. Please adjust the parameters or choose a different metric.')
 
-            ### TODO: Float columns als kategorisch mit einteilung n_max_number_of_categories
             values = list(df.columns)
 
             @st.cache
@@ -472,11 +479,16 @@ def main():
             prediction_to_cluster = -2
 
             testdf = pd.DataFrame(columns=scaled_df.columns)
+
             if len(new_values) > 0:
                 new_values = { k: (new_values[k] if k in new_values else min(scaled_df[k])) for k in testdf.columns }
                 testdf.loc[0] = [new_values[key] if key in new_values else min(scaled_df[key]) for key in testdf.columns]
                 test_embedding = trans.transform(testdf)
                 new_predictions = hdbscan.approximate_predict(clusterer, test_embedding)
+            else:
+                testdf = None
+                test_embedding = None
+                new_predictions = None
 
             create_cluster_graph_widget(
                 color_this_col,
