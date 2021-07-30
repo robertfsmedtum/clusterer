@@ -1,8 +1,6 @@
 def main():
-    import os
     import pandas as pd
     import numpy as np
-    import base64
     import hdbscan
     import copy
     import scipy
@@ -10,31 +8,57 @@ def main():
     import streamlit as st
     from sklearn.preprocessing import StandardScaler
     from sklearn.metrics.pairwise import pairwise_distances
-    from bokeh.transform import linear_cmap
-    from bokeh.plotting import figure, from_networkx
-    from bokeh.models import HoverTool, ColumnDataSource, Label, NodesAndLinkedEdges, MultiLine, Title, Circle, ColorBar, BasicTicker, LinearColorMapper, Range1d
     from bokeh.palettes import Turbo256
     from collections import Counter
     import umap
     import itertools
     import networkx as nx
-    import matplotlib.pyplot as plt
-    from networkx.algorithms import community
-    # from wordcloud import WordCloud
+
+    from widgets.value_counts import create_value_counts_widget
+    from widgets.dendrogram import create_dendrogram_widget
+    from widgets.wordcloud import create_wordcloud_widget
+    from widgets.results_text import create_results_text_widget
+    from widgets.results_table import create_results_table_widget
+    from widgets.network_graph import create_network_graph_widget
+    from widgets.column_analysis import create_column_analysis_widget
+    from widgets.cluster_graph import create_cluster_graph_widget
+
+    DEBUG_OPTIONS = {
+        "DEBUG": True,
+        "input": "./data/meta.csv",
+        "save_graph": False,
+        # "options": {
+        #     'psopat': [1]
+        # }
+    }
 
     results_max_n = 3
     results_text = ''
 
+    n_categories_for_float = 4
+    use_bars = True
+
+    default_disabled_modules = []
+    # default_disabled_modules = ['Wordcloud', 'Dendrogram', 'Results']
+    # default_disabled_modules = ['Network graph', 'Wordcloud', 'Dendrogram', 'Results']
+    # default_disabled_modules = ['Column analysis', 'Network graph', 'Value counts', 'Dendrogram', 'Wordcloud', 'Results (tables)', 'Results (text)']
+    module_list = ['Column analysis', 'Network graph', 'Value counts', 'Dendrogram', 'Wordcloud', 'Results (tables)', 'Results (text)']
+    
+    if n_categories_for_float == 4 and use_bars:
+        quartile_bars = ['▂', '▄', '▆', '█']
+
     ### Reduction of dimensions and parameters
     dimension_reduction_method_default = 0 # 1 = PacMAP, 0 = UMAP
     remaining_dimensions = 2
+
+    ### PacMAP and UMAP
+    default_number_of_neighbors = 20 # 20 # 15 # 20 # 5
 
     ### PaCMAP
     mn_ratio_default=5.0
     fp_ratio_default=10.0
 
     ### UMAP
-    default_number_of_neighbors = 20 # 20 # 15 # 20 # 5
     minimum_distance = 0.0
 
     ### Transformation of dataset
@@ -52,14 +76,8 @@ def main():
     if 'started' not in st.session_state:
         st.session_state.started = False
 
-    DEBUG_OPTIONS = {
-        "DEBUG": False,
-        "input": "./data.csv",
-        "save_graph": True,
-        "options": {
-            'data': [1]
-        }
-    }
+    ## TODO progress like: ▁ ▂ ▃ ▄ ▅ ▆ ▇ █
+    ## TODO progress like: ▂ ▄ ▆ █
 
     st.set_option('deprecation.showPyplotGlobalUse', False)
 
@@ -107,13 +125,6 @@ def main():
         h = se * scipy.stats.t.ppf((1 + confidence) / 2., n-1)
         return m, h
 
-    @st.cache
-    def download_link(object_to_download, download_filename, download_link_text):
-        if isinstance(object_to_download,pd.DataFrame):
-            object_to_download = object_to_download.to_csv(index=False)
-        b64 = base64.b64encode(object_to_download.encode()).decode()
-        return f'<a href="data:file/txt;base64,{b64}" download="{download_filename}">{download_link_text}</a>'
-
     st.write("""
     # 🕸 High Dimension Clusterer v0.1
     **for higher dimensional data using UMAP¹/PaCMAP² and HDBSCAN³𝄒⁴**
@@ -154,18 +165,14 @@ def main():
         df_raw, dict_df = convert_dataframe(df_raw)
 
         df_cols = list(df_raw.columns)
-        col1, col2, col3, col4 = st.beta_columns([1, 1, 1, 2])
 
+        col1, col2, col3, col4 = st.beta_columns([1, 1, 1, 2])
         col1.write('__Data__')
         col2.write('__Dimensions__')
         col3.write('__Rows__')
         col4.write('__Row value mean__')
 
-        col1.write('**Original**')
-        col2.write('_{:,}_'.format(len(df_cols)))
-        col3.write('_{:,}_'.format(len(df_raw)))
-        original_mean_ci = mean_confidence_interval(df_raw.T.sum())
-        col4.write('_{:.2f} +/- {:.2f} [95% CI]_'.format(original_mean_ci[0], original_mean_ci[1]))
+        column_analysis = st.empty()
 
         dimension_reduction_method = st.sidebar.radio(
             'Use the following dimension reduction method',
@@ -184,7 +191,7 @@ def main():
             default_minimum_cluster_size = 30 # 30 # 20 # 20 # 30 # 50
             default_selection_epsilon = 0.0
 
-        with st.sidebar.beta_expander("Filtering data (optional)"):
+        with st.sidebar.beta_expander("Filtering + coloring data"):
             options_col_to_exclude = st.multiselect(
                 'Excluding selected columns.',
                 df_cols,
@@ -194,6 +201,17 @@ def main():
                 'Select column(s) to separate data',
                 df_cols,
                 )
+            
+            color_this_col = st.selectbox(
+                'Select column to color',
+                ['by cluster'] + df_cols,
+            )
+
+            disabled_modules = st.multiselect(
+                'Disable modules',
+                module_list,
+                default = default_disabled_modules
+            )
 
             options = {}
             if len(options_col_to_analyze) > 0:
@@ -237,6 +255,8 @@ def main():
 
             if dimension_reduction_method == 'UMAP':
                 number_of_neighbors = st.slider('Minimum number of neighbors (UMAP)', 2, 100, default_number_of_neighbors, step=1)
+                mn_ratio = 0
+                fp_ratio = 0
             else:
                 mn_ratio = st.slider('Mid-near pairs to neighbors ratio (PaCMAP)', 0.0, 20.0, mn_ratio_default, step=0.1, format=f"%1f")
                 fp_ratio = st.slider('Further pairs to neighbors ratio (PaCMAP)', 0.0, 20.0, fp_ratio_default, step=0.1, format=f"%1f")
@@ -258,11 +278,6 @@ def main():
                 'Use pairwise distance',
                 ['Yes', 'No'],
                 1-pairwisedistance_default
-            )
-
-            color_this_col = st.selectbox(
-                'Select column to color',
-                ['None'] + df_cols,
             )
 
         if st.sidebar.button('▶️ Start analysis') or DEBUG_OPTIONS["DEBUG"] or st.session_state.started:
@@ -290,11 +305,24 @@ def main():
                 st.warning('Empty dataframe. Please change parameters or upload another dataset.')
                 st.stop()
 
+            col1.write('**Original**')
+            col2.write('_{:,}_'.format(len(df_cols)))
+            col3.write('_{:,}_'.format(len(df_raw)))
+            original_mean_ci = mean_confidence_interval(df_raw.T.sum())
+            col4.write('_{:.2f} +/- {:.2f} [95% CI]_'.format(original_mean_ci[0], original_mean_ci[1]))
             col1.write('**Filtered**')
             col2.write('_{:,}_'.format(len(df.columns)))
             col3.write('_{:,}_'.format(len(df)))
             filtered_mean_ci = mean_confidence_interval(df.T.sum())
             col4.write('_{:.2f} +/- {:.2f} [95% CI]_'.format(filtered_mean_ci[0], filtered_mean_ci[1]))
+
+            if 'Column analysis' not in disabled_modules:
+                create_column_analysis_widget(
+                    df,
+                    df_raw,
+                    column_analysis,
+                    mean_confidence_interval
+                )
 
             scaled_df = df
             if standardscalar == 'Yes':
@@ -347,51 +375,67 @@ def main():
             if True not in clustered:
                 st.warning('Did not find any clusters. Please adjust the parameters or choose a different metric.')
 
+            ### TODO: Float columns als kategorisch mit einteilung n_max_number_of_categories
             values = list(df.columns)
 
             @st.cache
-            def return_value_list(x):
-                values_to_return = []
-                for value in values:
-                    if x[value] == 1:
-                        values_to_return.append(value)
-                return values_to_return  
+            def create_categorical_df(df, n_cats, mode='linear'):
+                def create_appendix(i, n_cats):
+                    if use_bars and n_categories_for_float == 4:
+                        return ' ' + quartile_bars[i-1]
+                    else:
+                        return ' (' + str(i+1) + '/' + str(n_cats) + ')'
+                ndf = pd.DataFrame()
+                for col in df.columns:
+                    different_values = list(set(list(df[col])))
+                    ser = df[col]
+                    if len(different_values) > 2:
+                        if mode == 'linear':
+                            mi = min(ser)
+                            ma = max(ser)
+                            d = ma - mi
+                            steps = d/n_cats
+                            bins_mid = [np.round(steps*i+mi, 2) for i in range(n_cats)[1:]]
+                        elif mode == 'percentile':
+                            bins_mid = [np.round(np.percentile(ser, i*(100/n_cats)), 2) for i in range(n_cats)[1:]]
+                        bins = [-np.inf] + bins_mid + [np.inf]
+                        labels = []
+                        for i, cutoff in enumerate(bins_mid):
+                            if i == 0:
+                                labels.append('{} <= {}'.format(col, cutoff) + create_appendix(i+1, n_cats))
+                                labels.append('{} < {} <= {}'.format(cutoff, col, bins_mid[i+1]) + create_appendix(i+2, n_cats))
+                            elif i == len(bins_mid) - 1:
+                                labels.append('{} > {}'.format(col, cutoff) + create_appendix(i+2, n_cats))
+                            else:
+                                labels.append('{} < {} <= {}'.format(cutoff, col, bins_mid[i+1]) + create_appendix(i+2, n_cats))
+                        ndf[col] = pd.cut(ser, bins=bins, labels=labels)
+                    else:
+                        if 0 in different_values and 1 in different_values:
+                            ser = ser.replace(1, col)
+                            ser = ser.replace(0, '')
+                        ndf[col] = ser
+                return ndf.reset_index(drop=True) 
+
+            @st.cache
+            def return_row_values(x):
+                return [y for y in list(x) if y]
                     
             cluster_df = pd.DataFrame(standard_embedding, columns=('x', 'y'))
             cluster_df['cluster'] = [str(x) for x in hdbscan_labels]
             cluster_df['probabilities'] = hdbscan_probabilities
-            if color_this_col != 'None':
-                cluster_df['color by ' + color_this_col] = scaled_df[color_this_col]
-                different_labels = list(set(scaled_df[color_this_col]))
+            if color_this_col != 'by cluster':
+                cluster_df['color by ' + color_this_col] = df_raw[color_this_col]
+                different_labels = list(set(df_raw[color_this_col]))
             else:
                 different_labels = list(set(hdbscan_labels))
-            cluster_df['values'] = df.apply(lambda x: return_value_list(x), axis=1)
-            datasource = ColumnDataSource(cluster_df)
 
-            plot_figure = figure(
-                tools=('pan, wheel_zoom, reset, save')
-            )
+            categorical_df = create_categorical_df(df, n_categories_for_float, mode='linear')
 
-            plot_figure.add_tools(HoverTool(tooltips="""
-            <div>
-                <div>
-                    <span style='font-size: 16px; color: #224499'>Cluster:</span>
-                    <span style='font-size: 18px'>@cluster</span><br>
-                    <span style='font-size: 14px'>@values</span>
-                </div>
-            </div>
-            """))
-
-            if color_this_col != 'None':
-                mapper = linear_cmap(field_name='color by ' + color_this_col, palette=Turbo256, low=min(different_labels), high=max(different_labels)+0.8)
-            else:
-                mapper = linear_cmap(field_name='cluster', palette=Turbo256, low=min(different_labels), high=max(different_labels))
+            cluster_df['values'] = categorical_df.apply(lambda x: return_row_values(x), axis=1)
 
             different_labels_sorted = sorted(different_labels)
             total_color_length = len(Turbo256)
             clustercolors = {}
-
-            # st.pyplot(fig=axes, use_container_width=True)
 
             if len(different_labels_sorted) > 1:
                 for i in range(len(different_labels_sorted)):
@@ -402,78 +446,43 @@ def main():
             else:
                 clustercolors[-1] = Turbo256[0]
 
-            plot_figure.circle(
-                'x',
-                'y',
-                source=datasource,
-                line_color=mapper,
-                color=mapper,
-                line_alpha=0.6,
-                fill_alpha=0.6,
-                size=4,
-            )
-
             prediction_to_cluster = -2
 
+            testdf = pd.DataFrame(columns=scaled_df.columns)
+            testdf.loc[0] = [1 if x in new_values else 0 for x in testdf.columns]
+            test_embedding = trans.transform(testdf)
+            new_predictions = hdbscan.approximate_predict(clusterer, test_embedding)
+
+            create_cluster_graph_widget(
+                color_this_col,
+                cluster_df,
+                clustered,
+                different_labels,
+                new_values,
+                test_embedding,
+                new_predictions,
+                testdf,
+                mn_ratio,
+                fp_ratio,
+                minimum_samples,
+                minimum_cluster_size,
+                dimension_reduction_method,
+                number_of_neighbors,
+                new_input_metric,
+                values
+            )
+
             if len(new_values) > 0:
-                testdf = pd.DataFrame(columns=scaled_df.columns)
-                testdf.loc[0] = [1 if x in new_values else 0 for x in testdf.columns]
-                test_embedding = trans.transform(testdf)
-                new_predictions = hdbscan.approximate_predict(clusterer, test_embedding)
-                cluster_df_new = pd.DataFrame(test_embedding, columns=('x', 'y'))
-                cluster_df_new['cluster'] = pd.Series(new_predictions[0])
                 prediction_to_cluster = new_predictions[0][0]
-                cluster_df_new['values'] = testdf.apply(lambda x: return_value_list(x), axis=1)
-                datasource_new = ColumnDataSource(cluster_df_new)
-                plot_figure.circle(
-                    'x',
-                    'y',
-                    source=datasource_new,
-                    line_color='black',
-                    color=mapper,
-                    line_alpha=0.6,
-                    fill_alpha=0.6,
-                    size=40
-                )
-
-            if True in clustered:
-                mapper = LinearColorMapper(palette=Turbo256, low=min(different_labels), high=max(different_labels))
-                color_bar = ColorBar(
-                    ticker=BasicTicker(desired_num_ticks=len(different_labels)),
-                    color_mapper=mapper,
-                    label_standoff = 12,
-                    location = (0,0)
-                )
-                plot_figure.add_layout(color_bar, 'right')
-
-            if dimension_reduction_method == 'UMAP':
-                plot_figure.add_layout(Title(text='metric: {}, number of neighbors: {}, minimum sample size: {}, minimum cluster size: {}'.format(
-                        new_input_metric, number_of_neighbors, minimum_samples, minimum_cluster_size
-                    ), text_font_style="italic"), 'above')
-            else:
-                plot_figure.add_layout(Title(text='MN_ratio: {}, FP_ratio: {}, minimum sample size: {}, minimum cluster size: {}'.format(
-                        mn_ratio, fp_ratio, minimum_samples, minimum_cluster_size
-                    ), text_font_style="italic"), 'above')
-
-            if color_this_col != 'None':
-                    plot_figure.add_layout(Title(text=dimension_reduction_method + " projection colored in {} different {} values".format(len(different_labels), color_this_col), text_font_size="16pt"), 'above')
-            else:
-                if True in clustered:
-                    plot_figure.add_layout(Title(text=dimension_reduction_method + " projection with {} color-separated clusters".format(len(different_labels)-1), text_font_size="16pt"), 'above')
-                else:
-                    plot_figure.add_layout(Title(text=dimension_reduction_method + " projection with no separated clusters", text_font_size="16pt"), 'above')
-
-            st.bokeh_chart(plot_figure, use_container_width=True)
 
             countdf = pd.DataFrame(dtype=str)
 
-            all_clusters = sorted(list(set(list(cluster_df['cluster']))))
+            all_clusters = sorted(list(set(list(cluster_df['cluster']))), key=lambda x: int(x))
             all_counts = {}
 
             items_to_add = []
 
             for cluster in all_clusters:
-                # if int(cluster) >= 0:
                 sdf = cluster_df[cluster_df['cluster'] == cluster]
                 counts = Counter([item for inner in list(sdf['values']) for item in inner])
                 all_counts[cluster] = counts
@@ -483,14 +492,14 @@ def main():
                 if len(sorted_counts) > 0:
                     if cluster != '-1':
                         add_to_results += 'In cluster {}, the most common diseases were '.format(cluster)
-                        for i in range(results_max_n):
+                        for i in range(results_max_n if len(sorted_counts) >= results_max_n else len(sorted_counts)):
                             if i == max(range(results_max_n)):
                                 add_to_results = add_to_results[:-2]
                                 add_to_results += ' and '
                             add_to_results += "'{}' (n={}), ".format(sorted_counts[i][0], sorted_counts[i][1])
                     else:
                         add_to_results += 'The most common diseases for the unclassified patients were '.format(cluster)
-                        for i in range(results_max_n):
+                        for i in range(results_max_n if len(sorted_counts) >= results_max_n else len(sorted_counts)):
                             if i == max(range(results_max_n)):
                                 add_to_results = add_to_results[:-2]
                                 add_to_results += ' and '
@@ -506,7 +515,6 @@ def main():
                 item = item[:-2]
                 results_text += item + '. '
 
-            # # cluster = 1
             if len(all_clusters) > 1:
                 if prediction_to_cluster == -2:
                     cluster = st.sidebar.selectbox(
@@ -535,7 +543,6 @@ def main():
                     else:
                         nodeweights[node] = 1
                 combs = [(t[0], t[1]) if t[0] < t[1] else (t[1], t[0]) for t in list(itertools.combinations(l, 2))]
-                # G.add_edges_from(combs)
                 for comb in combs:
                     if comb in edgeweights:
                         edgeweights[comb] += 1
@@ -550,280 +557,62 @@ def main():
 
             nodeweights = {k: v for k, v in sorted(nodeweights.items(), key=lambda item: item[1], reverse=True)[:maximum_number_of_nodes]}
             labels, counts = zip(*list(nodeweights.items())[::-1])
-            if int(cluster) != -1:
-                mytitle = "Value counts in cluster {}".format(cluster)
-            else:
-                mytitle = "Value counts of unclustered data"
-            p_node = figure(y_range=labels, tools=('pan, wheel_zoom, reset, save'), 
-                title=mytitle, plot_height=maximum_number_of_nodes*20)
-            p_node.hbar(y=labels, right=counts, color=clustercolors[int(cluster)], height=0.618)
-            p_node.title.text_color = clustercolors[int(cluster)]
 
-            for nodekey in nodeweights:
-                G.add_node(nodekey, size=nodeweights[nodekey])
-            for edgekey in edgeweights:
-                if edgekey[0] in nodeweights and edgekey[1] in nodeweights:
-                    G.add_edge(edgekey[0], edgekey[1], weight=edgeweights[edgekey])
-                # G.add_edge(1, 2, weight=3)
-                # if edgekey[0] in nodeweights and edgekey[1] in nodeweights:
-                #     G.edges[edgekey[0], edgekey[1]]['weight'] = edgeweights[edgekey]
-
-            ### Keep only largest component
-            # small_components = sorted(nx.connected_components(G), key=len)[:-1]
-            # G.remove_nodes_from(itertools.chain.from_iterable(small_components))
-
-            degrees = dict(nx.degree(G))
-            nx.set_node_attributes(G, name='degree', values=degrees)
-
-            number_to_adjust_by = 5
-            adjusted_node_size = dict([(node, degree+number_to_adjust_by) for node, degree in nx.degree(G)])
-
-            min_node_size = min(adjusted_node_size.values())
-            max_node_size = max(adjusted_node_size.values())
-            target_min_size = 8
-            target_max_size = 14
-
-            if max_node_size > min_node_size:
-                adjusted_node_size = {k:target_min_size + ((v-min_node_size)/(max_node_size-min_node_size))*target_max_size for k, v in adjusted_node_size.items()}
-
-            # node_labels_size = [8 + ((int(x[1]["adjusted_node_size"])-min_node_size)/(max_node_size-min_node_size))*14 for x in list(G.nodes.data())]
-
-            nx.set_node_attributes(G, name='adjusted_node_size', values=adjusted_node_size)
-
-            size_by_this_attribute = 'adjusted_node_size'
-            # color_by_this_attribute = 'modularity_color'
-
-            # try:
-            #     communities = community.greedy_modularity_communities(G)
-            # except:
-            #     communities = None
-            #     # color_by_this_attribute = clustercolors[int(cluster)]
-            # else:
-            #     # Create empty dictionaries
-            #     modularity_class = {}
-            #     modularity_color = {}
-
-            #     communities_total = len(list(set(list(communities))))
-
-            #     #Loop through each community in the network
-            #     for community_number, community in enumerate(communities):
-            #         #For each member of the community, add their community number and a distinct color
-            #         for name in community: 
-            #             modularity_class[name] = community_number
-            #             modularity_color[name] = Turbo256[int(community_number*(1/communities_total)*len(Turbo256))]
-
-
-            #     # Add modularity class and color as attributes from the network above
-            #     nx.set_node_attributes(G, modularity_class, 'modularity_class')
-            #     nx.set_node_attributes(G, modularity_color, 'modularity_color')
-
-            #Choose colors for node and edge highlighting
-            node_highlight_color = 'white'
-            edge_highlight_color = 'black'
-
-            #Choose a title!
-            if int(cluster) != -1:
-                title = 'Network graph of cluster {}'.format(cluster)
-            else:
-                title = 'Network graph of unclustered data'
-
-            #Establish which categories will appear when hovering over each node
-            # if communities:
-            #     HOVER_TOOLTIPS = [
-            #         ("Value", "@index"),
-            #             ("Degree", "@degree"),
-            #             ("Modularity Class", "@modularity_class"),
-            #             ("Modularity Color", "$color[swatch]:modularity_color"),
-            #     ]
-            # else:
-            HOVER_TOOLTIPS = [
-                ("Value", "@index"),
-                ("Degree", "@degree")
-            ]
-
-            #Create a plot — set dimensions, toolbar, and title
-            plot = figure(tooltips = HOVER_TOOLTIPS, sizing_mode = 'scale_height',
-                        tools="pan,wheel_zoom,save,reset", active_scroll='wheel_zoom',
-                        x_range=Range1d(-10.1, 10.1), y_range=Range1d(-10.1, 10.1), title=title) # , plot_width=600, plot_height=600)
-
-            plot.title.text_color = clustercolors[int(cluster)]
-            
-            # plot.background_fill_color = clustercolors[int(cluster)]
-            # plot.background_fill_alpha = 0.1
-
-
-            #Create a network graph object
-            # https://networkx.github.io/documentation/networkx-1.9/reference/generated/networkx.drawing.layout.spring_layout.html
-            network_graph = from_networkx(G, nx.spring_layout, scale=10, center=(0, 0))
-
-            #Set node sizes and colors according to node degree (color as category from attribute) clustercolors[int(cluster)]
-            network_graph.node_renderer.glyph = Circle(size=size_by_this_attribute, fill_color=clustercolors[int(cluster)], line_width=0)
-            # network_graph.node_renderer.glyph = Circle(size=size_by_this_attribute, fill_color=color_by_this_attribute)
-            #Set node highlight colors
-            network_graph.node_renderer.hover_glyph = Circle(size=size_by_this_attribute, fill_color=node_highlight_color, line_width=2)
-            network_graph.node_renderer.selection_glyph = Circle(size=size_by_this_attribute, fill_color=node_highlight_color, line_width=2)
-
-            #Set edge opacity and width
-            network_graph.edge_renderer.glyph = MultiLine(line_alpha=0.05, line_width=1)
-            #Set edge highlight colors
-            network_graph.edge_renderer.selection_glyph = MultiLine(line_color=edge_highlight_color, line_width=2)
-            network_graph.edge_renderer.hover_glyph = MultiLine(line_color=edge_highlight_color, line_width=2)
-
-            #Highlight nodes and edges
-            network_graph.selection_policy = NodesAndLinkedEdges()
-            network_graph.inspection_policy = NodesAndLinkedEdges()
-
-            plot.renderers.append(network_graph)
-
-            #Add Labels
-            x, y = zip(*network_graph.layout_provider.graph_layout.values())
-            node_labels = list(G.nodes())
-
-            node_labels_size = [int(x[1]["adjusted_node_size"]) for x in list(G.nodes.data())]
-            max_node_label_size = max(node_labels_size)
-            min_node_label_size = min(node_labels_size)
-
-            node_labels_size = [str(x) + 'px' for x in node_labels_size]
-            if max_node_label_size > min_node_label_size:
-                node_labels_alpha = [0.5 + ((int(x[1]["adjusted_node_size"])-min_node_label_size)/(max_node_label_size-min_node_label_size))*0.5 for x in list(G.nodes.data())]
-            else:
-                node_labels_alpha = [0.8 for x in list(G.nodes.data())]        
-            source = ColumnDataSource({'x': x, 'y': y, 'name': [node_labels[i] for i in range(len(x))], 'fontsize': [node_labels_size[i] for i in range(len(x))], 'alpha': [node_labels_alpha[i] for i in range(len(x))]})
-
-            labels = []
-            for x, y, name, fontsize, alpha in zip(source.data['x'], source.data['y'], source.data['name'], source.data['fontsize'], source.data['alpha']):
-                labels.append(Label(x=x, y=y, text=name, text_alpha=alpha, text_align ='center', text_font_size=fontsize, background_fill_color='white', background_fill_alpha=.7))
-                plot.add_layout(labels[-1])
-
-            st.bokeh_chart(plot, use_container_width=True)
-            st.bokeh_chart(p_node, use_container_width=True)
-
-            if DEBUG_OPTIONS['save_graph']:
-                gephi_cluster_df = cluster_df.copy()
-                gephi_cluster_df['values'] = gephi_cluster_df['values'].apply(lambda x: '_'.join(x))
-                for c in all_clusters:
-                    os.makedirs('./graph_files', exist_ok=True)
-                    gdf = gephi_cluster_df[gephi_cluster_df['cluster'] == c].reset_index(drop=True)
-                    gdf.to_excel('./graph_files/graph_c' + str(c) + '.xlsx', index=False)
-
-            # g = clusterer.condensed_tree_.to_networkx()
-            # nx.write_gexf(g, "network.gexf")
-
-            fig, ax = plt.subplots()
-            clusterer.condensed_tree_.plot(select_clusters=True, selection_palette=list(clustercolors.values())[1:], axis=ax)            
-            plt.title('Cluster hierarchy dendrogram')
-            st.pyplot(fig)
-
-            # if cluster in all_counts:
-            #     wordcloud = WordCloud(
-            #         background_color="white", 
-            #         max_words=200, 
-            #         contour_width=3, 
-            #         contour_color='steelblue',
-            #         width=int(1000*8/10),
-            #         height=int(618*8/10)
-            #         )
-            #     wordcloud.generate_from_frequencies(dict(all_counts[cluster]))
-
-            #     st.image(wordcloud.to_image(), width=None)
-
-            if dimension_reduction_method == 'UMAP':
-                dimension_reduction_text = 'Uniform Manifold Approximation and Projection (UMAP)'
-                dimension_reduction_parameters = 'with given parameters (n_neighbors={}, min_dist={}) '.format(
-                    number_of_neighbors,
-                    int(minimum_distance) if float(minimum_distance).is_integer() else minimum_distance,
+            if 'Network graph' not in disabled_modules:
+                create_network_graph_widget(
+                    G,
+                    nodeweights,
+                    edgeweights,
+                    cluster,
+                    clustercolors,
                 )
-                metric_text = 'We used {} as a distance metric as suggested by Aggarwal, Hinneburg et Keim⁴ for higher dimensional data.'.format(metric)
-                dimension_reduction_citation = 'McInnes, L., Healy, J., Saul, N. & Großberger, L. UMAP: uniform manifold approximation and projection. J. Open Source Softw. 3, 861 (2018).'
-            else:
-                dimension_reduction_text = 'Pairwise Controlled Manifold Approximation (PaCMAP)'
-                dimension_reduction_parameters = 'with given parameters (MN_ratio={}, FP_ratio={}) '.format(
-                    int(mn_ratio) if float(mn_ratio).is_integer() else mn_ratio,
-                    int(fp_ratio) if float(fp_ratio).is_integer() else fp_ratio,
-                )                
-                metric_text = ''
-                dimension_reduction_citation = 'Yingfan Wang, , Haiyang Huang, Cynthia Rudin, and Yaron Shaposhnik. "Understanding How Dimension Reduction Tools Work: An Empirical Approach to Deciphering t-SNE, UMAP, TriMAP, and PaCMAP for Data Visualization." (2020).'
 
-            with st.beta_expander("Results"):
-                st.info('''
-                    **Methods**\n
+            if 'Value counts' not in disabled_modules:
+                create_value_counts_widget(    
+                    cluster, 
+                    labels, 
+                    maximum_number_of_nodes,
+                    counts,
+                    clustercolors
+                )
 
-                    The raw dataset of contains {} different dimensions (= disease entities) with
-                    binary values (0 = no disease, 1 = disease) and {} rows (= different patients).
-                    The average number of diseases was {:.2f} +/- {:.2f} [95% CI].
-                    
-                    After filtering the {} column, the remaining dataset
-                    consits of {} different dimensions and {} rows. The average number of 
-                    diseases was {:.2f} +/- {:.2f} [95% CI].
+            if 'Dendrogram' not in disabled_modules:
+                create_dendrogram_widget(clusterer, clustercolors)
 
-                    After performing {}¹ {}for dimension reduction, each row of the dataset became a {}-dimensional 
-                    representation of the corresponding patient.
+            if 'Wordcloud' not in disabled_modules:
+                create_wordcloud_widget(cluster, all_counts)
 
-                    Next, a high performance implementation² of
-                    Hierarchical Density-Based Spatial Clustering of Applications with Noise (HDBSCAN)³ 
-                    was utilized, which uses unsupervised learning to find clusters (= dense regions) within
-                    the dataset. After visual exploration of the {}-dimensional representation and the cluster hierarchy dendrogram (Supp. Fig. 1), 
-                    we set the parameters (min_samples={}, min_cluster_size={}, cluster_selection_epsilon={}) to get the best fit of the projected dense regions.
-                    {}
-                    For reproducibility a random seed of {} was set.
-                    
-                    **Results**\n
-                    After performing {} dimension reduction and HDBSCAN clustering, we found {} different clusters.
-                    {} ({:.2f}%) patients were not assigned to any cluster.
-                    
-                    {}
-
-                    **Citations**\n
-                    ¹ {}\n
-                    ² L. McInnes, J. Healy, S. Astels, hdbscan: Hierarchical density based clustering In: Journal of Open Source Software, The Open Journal, volume 2, number 11. 2017.\n 
-                    ³ Campello R.J.G.B., Moulavi D., Sander J. (2013) Density-Based Clustering Based on Hierarchical Density Estimates. In: Pei J., Tseng V.S., Cao L., Motoda H., Xu G. (eds) Advances in Knowledge Discovery and Data Mining. PAKDD 2013. Lecture Notes in Computer Science, vol 7819. Springer, Berlin, Heidelberg.\n
-                    ⁴ Aggarwal C.C., Hinneburg A., Keim D.A. (2001) On the Surprising Behavior of Distance Metrics in High Dimensional Space. In: Van den Bussche J., Vianu V. (eds) Database Theory — ICDT 2001. ICDT 2001. Lecture Notes in Computer Science, vol 1973. Springer, Berlin, Heidelberg. https://doi.org/10.1007/3-540-44503-X_27
-
-                '''.format(
-                    len(df_cols), 
-                    len(df_raw),
-                    original_mean_ci[0], 
-                    original_mean_ci[1],
-                    ' '.join(options.keys()),
-                    len(df.columns),
-                    len(df),
-                    filtered_mean_ci[0], 
-                    filtered_mean_ci[1],
-                    dimension_reduction_text,
-                    dimension_reduction_parameters,
-                    remaining_dimensions,
+            if 'Results (text)' not in disabled_modules:
+                create_results_text_widget(
+                    dimension_reduction_method,
+                    number_of_neighbors,
+                    minimum_distance,
+                    metric,
+                    mn_ratio,
+                    fp_ratio,
+                    df_cols, 
+                    df_raw,
+                    df,
+                    original_mean_ci, 
+                    filtered_mean_ci,
+                    options,
                     remaining_dimensions,
                     minimum_samples,
                     minimum_cluster_size,
-                    int(cluster_selection_epsilon) if float(cluster_selection_epsilon).is_integer() else cluster_selection_epsilon,
-                    metric_text,
+                    cluster_selection_epsilon,
                     random_seed,
-                    dimension_reduction_method,
-                    len(different_labels)-1,
-                    len(cluster_df[cluster_df['cluster'] == '-1']),
-                    100*len(cluster_df[cluster_df['cluster'] == '-1'])/len(df),
-                    results_text,
-                    dimension_reduction_citation
-                    ))
+                    different_labels,
+                    cluster_df,
+                    results_text
+                )
 
-            with st.beta_expander("Raw dataframe"):
-                st.write(df)
-                st.markdown(download_link(df, 'df_raw.csv', 'Download raw dataset'), unsafe_allow_html=True)
-
-            with st.beta_expander("Clustered dataframe"):
-                gephi_cluster_df = cluster_df.copy()
-                gephi_cluster_df['values'] = gephi_cluster_df['values'].apply(lambda x: '_'.join(x))
-                st.write(cluster_df)
-                st.markdown(download_link(gephi_cluster_df, 'clusters.csv', 'Download clusters'), unsafe_allow_html=True)
-
-            with st.beta_expander("Value counts dataframe"):
-                st.write(countdf)
-                st.markdown(download_link(countdf, 'counts.csv', 'Download counts'), unsafe_allow_html=True)
-
-            if len(dict_df) > 0:
-                with st.beta_expander("Dictionary for filetype conversion"):
-                    st.write(dict_df)
-                    st.markdown(download_link(dict_df, 'dictionary.csv', 'Download dictionary'), unsafe_allow_html=True)
+            if 'Results (tables)' not in disabled_modules:
+                create_results_table_widget(
+                    df,
+                    cluster_df,
+                    countdf,
+                    dict_df
+                )
 
         if (not st.session_state.started) and (not DEBUG_OPTIONS["DEBUG"]):
             st.write("""

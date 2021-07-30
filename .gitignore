@@ -2,5 +2,10 @@
 __pycache__
 .DS_STORE
 graph_files
+clusterer_backup.py
 rest.txt
 data.csv
+it.xlsx
+preprocess.py
+data
+test.py
