@@ -5,6 +5,8 @@ from bokeh.plotting import figure
 from bokeh.transform import linear_cmap
 from bokeh.models import ColumnDataSource, HoverTool, ColorBar, BasicTicker, Title, LinearColorMapper, FixedTicker, FuncTickFormatter
 
+RdGn2 = ('#006837', '#a50026')
+
 @st.cache
 def return_value_list(x, values):
     values_to_return = []
@@ -48,7 +50,10 @@ def create_cluster_graph_widget(
 
         if color_this_col != 'by cluster':
             color_col = cluster_df['color by ' + color_this_col]
-            color_palette = RdYlGn11
+            if len(different_labels) == 2:
+                color_palette = RdGn2
+            else:
+                color_palette = RdYlGn11
             mapper = linear_cmap(field_name='color by ' + color_this_col, palette=color_palette, low=min(color_col), high=max(color_col))
             # mapper = linear_cmap(field_name='color by ' + color_this_col, palette=Turbo256, low=min(different_labels), high=max(different_labels)+0.8)
         else:
@@ -89,15 +94,35 @@ def create_cluster_graph_widget(
                 mi = min(color_col)
                 ma = max(color_col)
                 mapper = LinearColorMapper(palette=color_palette, low=mi, high=ma)
-                desired_ticks = 11
-                dif = ma - mi
-                step = dif/desired_ticks
-                ticks_list = [mi] + [mi+i*step for i in list(range(desired_ticks))[1:]] + [ma]
-                ticks_list = [int(x) if float(x).is_integer() else round(x, 1) for x in ticks_list]
-                ticker = FixedTicker(ticks=ticks_list)
-                formatter = FuncTickFormatter(code="""
-                    return tick
-                    """)
+
+                if color_palette == RdGn2:
+                    desired_ticks = 2
+                    step = ma - mi
+                    smi = mi + step/4
+                    sma = ma - step/4
+                    mid = mi + step/2
+                    ticks_list = [smi, sma]
+                    ticks_list_dict = {smi: mi, sma: ma}
+                    mylist = [mi, mid, ma]
+                    ticker = FixedTicker(ticks=ticks_list)
+                    formatter = FuncTickFormatter(code="""
+                        var m = %s;  
+                        if (tick < m[1]) {
+                            return m[0]
+                        } else {
+                            return m[2]                  
+                        };
+                        """ % mylist)
+                else:
+                    desired_ticks = 11
+                    dif = ma - mi
+                    step = dif/desired_ticks
+                    ticks_list = [mi] + [mi+i*step for i in list(range(desired_ticks))[1:]] + [ma]
+                    ticks_list = [int(x) if float(x).is_integer() else round(x, 1) for x in ticks_list]
+                    ticker = FixedTicker(ticks=ticks_list)
+                    formatter = FuncTickFormatter(code="""
+                        return tick
+                        """)
                 color_bar = ColorBar(
                     ticker=ticker,
                     formatter=formatter,
@@ -127,7 +152,12 @@ def create_cluster_graph_widget(
                 ), text_font_style="italic"), 'above')
 
         if color_this_col != 'by cluster':
-                plot_figure.add_layout(Title(text=dimension_reduction_method + " projection colored in {} values".format(len(different_labels), color_this_col), text_font_size="16pt"), 'above')
+                plot_figure.add_layout(Title(text=dimension_reduction_method + " projection colored by {} [{}-{}]".format(
+                    color_this_col, 
+                    int(min(different_labels)) if float(min(different_labels)).is_integer() else min(different_labels), 
+                    int(max(different_labels)) if float(max(different_labels)).is_integer() else max(different_labels), 
+                    ), text_font_size="16pt"), 'above')
+                # plot_figure.add_layout(Title(text=dimension_reduction_method + " projection colored in {} values".format(len(different_labels), color_this_col), text_font_size="16pt"), 'above')
         else:
             if True in clustered:
                 plot_figure.add_layout(Title(text=dimension_reduction_method + " projection with {} color-separated clusters".format(len(different_labels)-1), text_font_size="16pt"), 'above')

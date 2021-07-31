@@ -29,7 +29,7 @@ def main():
         "input": "./data/data.csv",
         "save_graph": False,
         # "options": {
-        #     'data': [1]
+        #     'psopat': [1]
         # }
     }
 
@@ -170,11 +170,24 @@ def main():
 
         df_cols = list(df_raw.columns)
 
+        @st.cache
+        def calculate_original_meta(df):
+            number_of_cols = len(df.columns)
+            number_of_rows = len(df)
+            original_mean_ci = mean_confidence_interval(df.T.sum())
+            return number_of_cols, number_of_rows, original_mean_ci
+
+        number_of_cols_orig, number_of_rows_orig, original_mean_ci = calculate_original_meta(df_raw)
+
         col1, col2, col3, col4 = st.beta_columns([1, 1, 1, 2])
         col1.write('__Data__')
         col2.write('__Dimensions__')
         col3.write('__Rows__')
         col4.write('__Row value mean__')
+        col1.write('**Original**')
+        col2.write('_{:,}_'.format(number_of_cols_orig))
+        col3.write('_{:,}_'.format(number_of_rows_orig))
+        col4.write('_{:.2f} +/- {:.2f} [95% CI]_'.format(original_mean_ci[0], original_mean_ci[1]))
 
         column_analysis = st.empty()
 
@@ -205,6 +218,8 @@ def main():
                 'Select column(s) to separate data',
                 df_cols,
                 )
+
+            placeholder_col_to_analyze = st.empty()
             
             color_this_col = st.selectbox(
                 'Select column to color',
@@ -212,7 +227,7 @@ def main():
             )
 
             disabled_modules = st.multiselect(
-                'Disable modules',
+                'Disabled modules',
                 module_list,
                 default = default_disabled_modules
             )
@@ -222,8 +237,8 @@ def main():
                 for selected_col in options_col_to_analyze:
                     groups_to_analyze = list(set(list(df_raw[selected_col])))
 
-                    options[selected_col] = st.multiselect(
-                        'Analyze selected values of {}'.format(selected_col),
+                    options[selected_col] = placeholder_col_to_analyze.multiselect(
+                        '↳ Analyze selected values of {}'.format(selected_col),
                         groups_to_analyze,
                         default=groups_to_analyze
                         )
@@ -290,12 +305,14 @@ def main():
 
             if len(options) > 0:
                 for key in options:
-                    df = df[df[key].isin(options[key])].reset_index(drop=True)
+                    df = df[df[key].isin(options[key])]
                     df = df.drop(key, axis=1)
 
             for col in options_col_to_exclude:
                 if col in df:
                     df = df.drop(col, axis=1)
+
+            #### Correct index df
 
             if len(df) == 0:
                 st.warning('Empty dataframe. Please change parameters or upload another dataset.')
@@ -326,15 +343,17 @@ def main():
             else:
                 new_values = ''
 
-            col1.write('**Original**')
-            col2.write('_{:,}_'.format(len(df_cols)))
-            col3.write('_{:,}_'.format(len(df_raw)))
-            original_mean_ci = mean_confidence_interval(df_raw.T.sum())
-            col4.write('_{:.2f} +/- {:.2f} [95% CI]_'.format(original_mean_ci[0], original_mean_ci[1]))
+            @st.cache
+            def calculate_filtered_meta(df):
+                number_of_cols = len(df.columns)
+                number_of_rows = len(df)
+                filtered_mean_ci = mean_confidence_interval(df.T.sum())
+                return number_of_cols, number_of_rows, filtered_mean_ci
+
+            number_of_cols, number_of_rows, filtered_mean_ci = calculate_filtered_meta(df)
             col1.write('**Filtered**')
-            col2.write('_{:,}_'.format(len(df.columns)))
-            col3.write('_{:,}_'.format(len(df)))
-            filtered_mean_ci = mean_confidence_interval(df.T.sum())
+            col2.write('_{:,}_'.format(number_of_cols))
+            col3.write('_{:,}_'.format(number_of_rows))
             col4.write('_{:.2f} +/- {:.2f} [95% CI]_'.format(filtered_mean_ci[0], filtered_mean_ci[1]))
 
             if 'Column analysis' not in disabled_modules:
@@ -410,12 +429,15 @@ def main():
 
             @st.cache
             def create_categorical_df(df, n_cats, mode='linear'):
+
                 def create_appendix(i, n_cats):
                     if use_bars and n_categories_for_float == 4:
                         return ' ' + quartile_bars[i-1]
                     else:
                         return ' (' + str(i+1) + '/' + str(n_cats) + ')'
-                ndf = pd.DataFrame()
+
+                ndf = pd.DataFrame(index=df.index)
+
                 for col in df.columns:
                     different_values = list(set(list(df[col])))
                     ser = df[col]
@@ -444,15 +466,17 @@ def main():
                             ser = ser.replace(1, col)
                             ser = ser.replace(0, '')
                         ndf[col] = ser
-                return ndf.reset_index(drop=True) 
+                return ndf
 
             @st.cache
             def return_row_values(x):
                 return [y for y in list(x) if y]
                     
-            cluster_df = pd.DataFrame(standard_embedding, columns=('x', 'y'))
+            # cluster_df = pd.DataFrame(standard_embedding, columns=('x', 'y'))
+            cluster_df = pd.DataFrame(standard_embedding, columns=('x', 'y'), index=df.index)
             cluster_df['cluster'] = [str(x) for x in hdbscan_labels]
             cluster_df['probabilities'] = hdbscan_probabilities
+
             if color_this_col != 'by cluster':
                 cluster_df['color by ' + color_this_col] = df_raw[color_this_col]
                 different_labels = list(set(df_raw[color_this_col]))
