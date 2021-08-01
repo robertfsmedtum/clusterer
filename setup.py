@@ -28,7 +28,8 @@ setup(
       'bokeh==2.2.2',
       'decorator==4.4.2',
       'networkx==2.5.1',
-      'selenium'
+      'selenium',
+      'wordcloud'
   ],
   classifiers=[
     'Development Status :: 4 - Beta',
