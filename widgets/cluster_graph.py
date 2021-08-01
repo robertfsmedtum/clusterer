@@ -35,7 +35,8 @@ def create_cluster_graph_widget(
 ):
         datasource = ColumnDataSource(cluster_df)
         plot_figure = figure(
-            tools=('pan, wheel_zoom, reset, save')
+            tools=('pan, wheel_zoom, reset, save'),
+            output_backend="svg"
         )
 
         plot_figure.add_tools(HoverTool(tooltips="""
