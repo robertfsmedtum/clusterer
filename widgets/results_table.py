@@ -22,7 +22,7 @@ def create_results_table_widget(
 
     with st.beta_expander("Clustered dataframe"):
         gephi_cluster_df = cluster_df.copy()
-        gephi_cluster_df['values'] = gephi_cluster_df['values'].apply(lambda x: '_'.join(x))
+        gephi_cluster_df['values'] = gephi_cluster_df['values'].apply(lambda x: '_'.join(x) if not isinstance(x, int) else '')
         st.write(cluster_df)
         st.markdown(download_link(gephi_cluster_df, 'clusters.csv', 'Download clusters'), unsafe_allow_html=True)
 

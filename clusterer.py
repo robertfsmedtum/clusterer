@@ -36,6 +36,7 @@ def main():
     results_max_n = 3
     results_text = ''
     drop_incomplete_rows_default = 0
+    maximum_number_of_values_per_category = 20
 
     n_categories_for_float = 4
     use_bars = True
@@ -441,7 +442,7 @@ def main():
                 for col in df.columns:
                     different_values = list(set(list(df[col])))
                     ser = df[col]
-                    if len(different_values) > 2:
+                    if len(different_values) > maximum_number_of_values_per_category:
                         if mode == 'linear':
                             mi = min(ser)
                             ma = max(ser)
@@ -567,7 +568,7 @@ def main():
                             add_to_results += "'{}' (n={}), ".format(sorted_counts[i][0], sorted_counts[i][1])
                 items_to_add.append(add_to_results)
 
-                toplist = ['{:03d}'.format(item[1]) + ': ' + item[0] for item in sorted_counts]
+                toplist = ['{:03d}'.format(item[1]) + ': ' + str(item[0]) for item in sorted_counts]
                 countdf['Cluster ' + str(cluster)] = pd.Series(toplist, dtype=str)
 
             items_to_add = items_to_add[1:] + [items_to_add[0]]
