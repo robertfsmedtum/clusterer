@@ -91,9 +91,10 @@ def main():
 
     st.write('Platform:')
     st.write(str(platform.processor()))
-    st.write(str(len(str(platform.processor()))))
+    st.write(str())
 
-    if platform.processor():
+
+    if len(str(platform.processor())) != '':
         with open('reorder.json', 'r') as f:
             reorder_dict = json.loads(f.read())
 
@@ -171,16 +172,13 @@ def main():
 
     uploaded_file = st.sidebar.file_uploader("📂 Select a file (csv or excel)")
 
-
     if (uploaded_file is None and not DEBUG_OPTIONS["DEBUG"]) and 'df_raw' not in st.session_state:
-        if platform.processor():
+        if len(str(platform.processor())) == 0:
             st.write("""
                 ## **Instructions**
                 The High Dimension Clusterer (HDC) lets you analyze higher dimensional datasets in the form of
                 csv or excel files containing columns of binary, categorical or numerical data.\n
                 After you haven chosen your dataset, you can tune the parameters or start the analysis right away.\n
-                *Note that this is a local application which works offline when using with a localhost adress.*
-                *The provided datasets do **not** get uploaded and you can stay offline after the application first loaded.*\n
                 You use the streamlit hosted version, see https://streamlit.io/privacy-policy for privacy details: \n
                 *"We also want to assure you that the Streamlit open-source software does not — and never will — see or store any of the data you put into any app that you develop with it. That data belongs to you and only you."*
             """)
