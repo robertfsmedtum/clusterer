@@ -89,7 +89,9 @@ def main():
 
     reorder_dict = {}
 
-    st.write(platform.processor())
+    st.write('Platform:')
+    st.write(str(platform.processor()))
+    st.write(str(len(str(platform.processor()))))
 
     if platform.processor():
         with open('reorder.json', 'r') as f:
