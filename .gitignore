@@ -9,3 +9,10 @@ it.xlsx
 preprocess.py
 data
 test.py
+disease_dict.json
+.*
+~*
+*.xlsx
+*.xlsx
+*.json
+*.csv

@@ -20,13 +20,18 @@ def create_network_graph_widget(
     degrees = dict(nx.degree(G))
     nx.set_node_attributes(G, name='degree', values=degrees)
 
-    number_to_adjust_by = 5
-    adjusted_node_size = dict([(node, degree+number_to_adjust_by) for node, degree in nx.degree(G)])
+    number_to_adjust_by = 5 # 5
+
+    # adjusted_node_size = dict([(node, degree+number_to_adjust_by) for node, degree in nx.degree(G)])
+    adjusted_node_size = dict([(node, d['size']+number_to_adjust_by) for node, d in G.nodes.data()])
+
+    for _,_,d in G.edges(data=True):
+        d['weight'] = d['weight'] * 0.1
 
     min_node_size = min(adjusted_node_size.values())
     max_node_size = max(adjusted_node_size.values())
-    target_min_size = 8
-    target_max_size = 14
+    target_min_size = 8 # 8
+    target_max_size = 14 # 14
 
     if max_node_size > min_node_size:
         adjusted_node_size = {k:target_min_size + ((v-min_node_size)/(max_node_size-min_node_size))*target_max_size for k, v in adjusted_node_size.items()}
@@ -69,7 +74,7 @@ def create_network_graph_widget(
     network_graph.node_renderer.selection_glyph = Circle(size=size_by_this_attribute, fill_color=node_highlight_color, line_width=2)
 
     #Set edge opacity and width
-    network_graph.edge_renderer.glyph = MultiLine(line_alpha=0.05, line_width=1)
+    network_graph.edge_renderer.glyph = MultiLine(line_alpha=0.05, line_width="weight")
     #Set edge highlight colors
     network_graph.edge_renderer.selection_glyph = MultiLine(line_color=edge_highlight_color, line_width=2)
     network_graph.edge_renderer.hover_glyph = MultiLine(line_color=edge_highlight_color, line_width=2)

@@ -11,10 +11,12 @@ def main():
     from bokeh.palettes import Turbo256
     from collections import Counter
     import umap
+    import json
     import pynndescent
     import itertools
     import networkx as nx
-
+    import platform
+    
     from widgets.value_counts import create_value_counts_widget
     from widgets.dendrogram import create_dendrogram_widget
     from widgets.wordcloud import create_wordcloud_widget
@@ -26,7 +28,7 @@ def main():
 
     DEBUG_OPTIONS = {
         "DEBUG": False,
-        "input": "./data/data.csv",
+        "input": "./data/alltogether_translated.csv",
         "save_graph": False,
         # "options": {
         #     'data': [1]
@@ -48,7 +50,7 @@ def main():
         quartile_bars = ['▂', '▄', '▆', '█']
 
     ### Reduction of dimensions and parameters
-    dimension_reduction_method_default = 0 # 1 = PacMAP, 0 = UMAP
+    dimension_reduction_method_default = 1 # 1 = PacMAP, 0 = UMAP
     remaining_dimensions = 2
 
     ### PacMAP and UMAP
@@ -56,7 +58,7 @@ def main():
 
     ### PaCMAP
     mn_ratio_default=5.0
-    fp_ratio_default=10.0
+    fp_ratio_default= 25.0 # 10.0
 
     ### UMAP
     minimum_distance = 0.0
@@ -85,8 +87,14 @@ def main():
         initial_sidebar_state="auto",
     )
 
+    reorder_dict = {}
+
+    if platform.processor():
+        with open('reorder.json', 'r') as f:
+            reorder_dict = json.loads(f.read())
+
     @st.cache
-    def convert_dataframe(df, drop_incomplete_rows):
+    def convert_dataframe(df, drop_incomplete_rows, reorder_dict):
         if drop_incomplete_rows == 'Yes':
             df.replace('', np.nan, inplace=True)
             df.dropna(inplace=True)
@@ -106,6 +114,20 @@ def main():
                         try:
                             my_different_values = sorted(list(set(df[col])))
                             mycatdict = { str(v):int(i) for i, v in enumerate(my_different_values)}
+                            if platform.processor():
+                                if col in reorder_dict:
+                                    mycatdict = reorder_dict[col]
+                                # else:
+                                #     print(mycatdict)
+                                #     x = '' # input()
+                                #     if x != '':
+                                #         x = str(x).split(',')
+                                #         vals = list(mycatdict.values())
+                                #         newvals = []
+                                #         for index in x:
+                                #             newvals.append(vals[int(index)])    
+                                #         mycatdict = dict(zip(list(mycatdict.keys()), newvals))
+                                #     reorder_dict[col] = mycatdict
                         except:
                             mycatdict = { str(v):int(i) for i, v in enumerate(list(set(df[col])))}
                         for k in previous_keydict:
@@ -114,7 +136,8 @@ def main():
                         conversion_dicts[col] = mycatdict
                         df[col] = df[col].replace(mycatdict).astype('Int64')
         cdf = pd.DataFrame(conversion_dicts)
-        return df, cdf
+        cdf = cdf.astype('Int32')
+        return df, cdf, reorder_dict
 
     @st.cache
     def mean_confidence_interval(data, confidence=0.95):
@@ -137,18 +160,28 @@ def main():
 
     uploaded_file = st.sidebar.file_uploader("📂 Select a file (csv or excel)")
 
-    if (uploaded_file is None and not DEBUG_OPTIONS["DEBUG"]) and 'df_raw' not in st.session_state:
-        st.write("""
-            ## **Instructions**
-            The High Dimension Clusterer (HDC) lets you analyze higher dimensional datasets in the form of
-            csv or excel files containing columns of binary, categorical or numerical data.\n
-            After you haven chosen your dataset, you can tune the parameters or start the analysis right away.\n
-            *Note that this is a local application which works offline when using with a localhost adress.*
-            *The provided datasets do **not** get uploaded and you can stay offline after the application first loaded.*\n
-            When you use the streamlit hosted version, see https://streamlit.io/privacy-policy for details: \n
-            *"We also want to assure you that the Streamlit open-source software does not — and never will — see or store any of the data you put into any app that you develop with it. That data belongs to you and only you."*
 
-        """)
+    if (uploaded_file is None and not DEBUG_OPTIONS["DEBUG"]) and 'df_raw' not in st.session_state:
+        if platform.processor():
+            st.write("""
+                ## **Instructions**
+                The High Dimension Clusterer (HDC) lets you analyze higher dimensional datasets in the form of
+                csv or excel files containing columns of binary, categorical or numerical data.\n
+                After you haven chosen your dataset, you can tune the parameters or start the analysis right away.\n
+                *Note that this is a local application which works offline when using with a localhost adress.*
+                *The provided datasets do **not** get uploaded and you can stay offline after the application first loaded.*\n
+                You use the streamlit hosted version, see https://streamlit.io/privacy-policy for privacy details: \n
+                *"We also want to assure you that the Streamlit open-source software does not — and never will — see or store any of the data you put into any app that you develop with it. That data belongs to you and only you."*
+            """)
+        else:
+            st.write("""
+                ## **Instructions**
+                The High Dimension Clusterer (HDC) lets you analyze higher dimensional datasets in the form of
+                csv or excel files containing columns of binary, categorical or numerical data.\n
+                After you haven chosen your dataset, you can tune the parameters or start the analysis right away.\n
+                *Note that this is a local application which works offline when using with a localhost adress.*
+                *The provided datasets do **not** get uploaded and you can stay offline during analysis.*\n
+            """)
     else:
         if DEBUG_OPTIONS["DEBUG"]:
             df_raw = pd.read_csv(DEBUG_OPTIONS["input"])
@@ -167,7 +200,14 @@ def main():
                 if 'df_raw' not in st.session_state:
                     st.session_state.df_raw = df_raw
 
-        df_raw, dict_df = convert_dataframe(df_raw, drop_incomplete_rows)
+        df_raw, dict_df, reorder_dict = convert_dataframe(df_raw, drop_incomplete_rows, reorder_dict)
+
+        # with open('reorder.json', 'w') as f:
+        #     f.write(json.dumps(reorder_dict, indent=4))
+
+        # st.write(dict_df)
+
+        # st.stop()
 
         df_cols = list(df_raw.columns)
 
@@ -206,7 +246,7 @@ def main():
         else:
             ### HDBSCAN
             default_minimum_samples = 5 # 5 # 5 # 10 # 5
-            default_minimum_cluster_size = 30 # 30 # 20 # 20 # 30 # 50
+            default_minimum_cluster_size = 20 # 30 # 30 # 20 # 20 # 30 # 50
             default_selection_epsilon = 0.0
 
         with st.sidebar.beta_expander("Filtering + coloring data"):
@@ -222,10 +262,13 @@ def main():
 
             placeholder_col_to_analyze = st.empty()
             
-            color_this_col = st.selectbox(
-                'Select column to color',
-                ['by cluster'] + df_cols,
+            color_these_cols = st.multiselect(
+                'Select column(s) to color',
+                df_cols,
+                default = []
             )
+
+            color_these_cols = ['by cluster'] + color_these_cols
 
             disabled_modules = st.multiselect(
                 'Disabled modules',
@@ -252,7 +295,7 @@ def main():
         with st.sidebar.beta_expander("Show additional settings"):
             if dimension_reduction_method == 'UMAP':
                 metric = st.selectbox(
-                    "What metric do you want to use in UMAP?",
+                    "What metric do you want to use in HDBSCAN?",
                     (
                         "euclidean",
                         "manhattan",
@@ -279,7 +322,7 @@ def main():
                 fp_ratio = 0
             else:
                 mn_ratio = st.slider('Mid-near pairs to neighbors ratio (PaCMAP)', 0.0, 20.0, mn_ratio_default, step=0.1, format=f"%1f")
-                fp_ratio = st.slider('Further pairs to neighbors ratio (PaCMAP)', 0.0, 20.0, fp_ratio_default, step=0.1, format=f"%1f")
+                fp_ratio = st.slider('Further pairs to neighbors ratio (PaCMAP)', 0.0, 50.0, fp_ratio_default, step=0.1, format=f"%1f")
                 number_of_neighbors = None
             minimum_samples = st.slider('Minimum number of samples (HDBSCAN)', 1, 100, default_minimum_samples, step=1)
             minimum_cluster_size = st.slider('Minimum cluster size (HDBSCAN)', 2, 100, default_minimum_cluster_size, step=1)
@@ -332,10 +375,10 @@ def main():
                 for new_col in new_cols:
                     new_values[new_col] = st.sidebar.slider(
                         'Value for ' + new_col, 
-                        0, 1, 0
-                        # min(df[new_col]), 
-                        # max(df[new_col]), 
-                        # min(df[new_col]),
+                        # 0, 1, 0
+                        min(df[new_col]), 
+                        max(df[new_col]), 
+                        min(df[new_col]),
                         # step = 0.1,
                         # format=f"%1f"
                         # step = 0.1 if max(df[new_col]) < 1 else 1, 
@@ -367,7 +410,9 @@ def main():
 
             scaled_df = df
             if standardscalar == 'Yes':
-                scaled_df = StandardScaler().fit_transform(scaled_df)
+                oldcolumns = list(scaled_df.columns)
+                scaled_array = StandardScaler().fit_transform(scaled_df)
+                scaled_df = pd.DataFrame(scaled_array, columns=oldcolumns)
             if pairwisedistance == 'Yes':
                 scaled_df = pairwise_distances(scaled_df)
 
@@ -429,7 +474,7 @@ def main():
             values = list(df.columns)
 
             @st.cache
-            def create_categorical_df(df, n_cats, mode='linear'):
+            def create_categorical_df(df, dict_df, n_cats, mode='linear'):
 
                 def create_appendix(i, n_cats):
                     if use_bars and n_categories_for_float == 4:
@@ -463,9 +508,16 @@ def main():
                                 labels.append('{} < {} <= {}'.format(cutoff, col, bins_mid[i+1]) + create_appendix(i+2, n_cats))
                         ndf[col] = pd.cut(ser, bins=bins, labels=labels)
                     else:
-                        if 0 in different_values and 1 in different_values:
+                        if 0 in different_values and 1 in different_values and len(different_values) == 2:
                             ser = ser.replace(1, col)
                             ser = ser.replace(0, '')
+                        else:
+                            if col in dict_df:
+                                ddf = dict_df.copy()
+                                ddf = ddf.dropna(subset=[col])
+                                td = dict(zip(list(ddf[col]), [col + ': ' + x for x in list(ddf.index)]))
+                                ser = ser.replace(td)
+                        ##### TODO more than 2 categories !! return original ?
                         ndf[col] = ser
                 return ndf
 
@@ -478,28 +530,56 @@ def main():
             cluster_df['cluster'] = [str(x) for x in hdbscan_labels]
             cluster_df['probabilities'] = hdbscan_probabilities
 
-            if color_this_col != 'by cluster':
-                cluster_df['color by ' + color_this_col] = df_raw[color_this_col]
-                different_labels = list(set(df_raw[color_this_col]))
-            else:
-                different_labels = list(set(hdbscan_labels))
+            # if 'by cluster' not in color_these_cols:
+            #     color_this_col = color_these_cols[0]
+            #     cluster_df['color by ' + color_this_col] = df_raw[color_this_col]
+            #     different_labels = list(set(df_raw[color_this_col]))
+            # else:
+            #     different_labels = list(set(hdbscan_labels))
 
-            categorical_df = create_categorical_df(df, n_categories_for_float, mode='linear')
+            different_labels = {}
+
+            for color_this_col in color_these_cols:
+                if 'by cluster' != color_this_col:
+                    # color_this_col = color_these_cols[0]
+                    cluster_df['color by ' + color_this_col] = df_raw[color_this_col]
+                    different_labels[color_this_col] = list(set(df_raw[color_this_col]))
+                else:
+                    different_labels[color_this_col] = list(set(hdbscan_labels))
+
+            # st.write(df)
+            # st.write(dict_df)
+
+            categorical_df = create_categorical_df(df, dict_df, n_categories_for_float, mode='linear')
+
+            # st.write(categorical_df)
+            # st.stop()
+
+            ### Check generated dataframe
+            # st.write(categorical_df)
+            # st.stop()
+
+            categorical_df.to_excel('yeah.xlsx', index=False)
 
             cluster_df['values'] = categorical_df.apply(lambda x: return_row_values(x), axis=1)
 
-            different_labels_sorted = sorted(different_labels)
-            total_color_length = len(Turbo256)
+            different_labels_sorted = {}
             clustercolors = {}
 
-            if len(different_labels_sorted) > 1:
-                for i in range(len(different_labels_sorted)):
-                    colorindex = i * int(total_color_length/(len(different_labels_sorted)-1))
-                    if colorindex > 255:
-                        colorindex = 255
-                    clustercolors[int(different_labels_sorted[i])] = Turbo256[colorindex]
-            else:
-                clustercolors[-1] = Turbo256[0]
+            for color_this_col in color_these_cols:
+                clustercolors[color_this_col] = {}
+                different_labels_sorted[color_this_col] = sorted(different_labels[color_this_col])
+
+                total_color_length = len(Turbo256)
+
+                if len(different_labels_sorted[color_this_col]) > 1:
+                    for i in range(len(different_labels_sorted[color_this_col])):
+                        colorindex = i * int(total_color_length/(len(different_labels_sorted[color_this_col])-1))
+                        if colorindex > 255:
+                            colorindex = 255
+                        clustercolors[color_this_col][int(different_labels_sorted[color_this_col][i])] = Turbo256[colorindex]
+                else:
+                    clustercolors[color_this_col][-1] = Turbo256[0]
 
             prediction_to_cluster = -2
 
@@ -515,24 +595,26 @@ def main():
                 test_embedding = None
                 new_predictions = None
 
-            create_cluster_graph_widget(
-                color_this_col,
-                cluster_df,
-                clustered,
-                different_labels,
-                new_values,
-                test_embedding,
-                new_predictions,
-                testdf,
-                mn_ratio,
-                fp_ratio,
-                minimum_samples,
-                minimum_cluster_size,
-                dimension_reduction_method,
-                number_of_neighbors,
-                new_input_metric,
-                values
-            )
+            for color_this_col in color_these_cols:
+                create_cluster_graph_widget(
+                    color_this_col,
+                    cluster_df,
+                    clustered,
+                    different_labels[color_this_col],
+                    new_values,
+                    test_embedding,
+                    new_predictions,
+                    testdf,
+                    mn_ratio,
+                    fp_ratio,
+                    minimum_samples,
+                    minimum_cluster_size,
+                    dimension_reduction_method,
+                    number_of_neighbors,
+                    new_input_metric,
+                    values,
+                    dict_df
+                )
 
             if len(new_values) > 0:
                 prediction_to_cluster = new_predictions[0][0]
@@ -604,7 +686,8 @@ def main():
                         nodeweights[node] += 1
                     else:
                         nodeweights[node] = 1
-                combs = [(t[0], t[1]) if t[0] < t[1] else (t[1], t[0]) for t in list(itertools.combinations(l, 2))]
+                comblist = list(itertools.combinations(l, 2))
+                combs = [(t[0], t[1]) if str(t[0]) < str(t[1]) else (t[1], t[0]) for t in comblist]
                 for comb in combs:
                     if comb in edgeweights:
                         edgeweights[comb] += 1
@@ -615,6 +698,8 @@ def main():
 
             if not any(list(sdf['values'])):
                 sdf['values'] = [['None'] for _ in sdf.index]
+            # print(sdf['values'])
+            # translator = zip(list(dict_df[]), values_list)
             sdf['values'].apply(lambda x: create_network(x))
 
             nodeweights = {k: v for k, v in sorted(nodeweights.items(), key=lambda item: item[1], reverse=True)[:maximum_number_of_nodes]}
@@ -626,7 +711,7 @@ def main():
                     nodeweights,
                     edgeweights,
                     cluster,
-                    clustercolors,
+                    clustercolors[list(clustercolors.keys())[0]]
                 )
 
             if 'Value counts' not in disabled_modules:
@@ -635,11 +720,11 @@ def main():
                     labels, 
                     maximum_number_of_nodes,
                     counts,
-                    clustercolors
+                    clustercolors[list(clustercolors.keys())[0]]
                 )
 
             if 'Dendrogram' not in disabled_modules:
-                create_dendrogram_widget(clusterer, clustercolors)
+                create_dendrogram_widget(clusterer, clustercolors[list(clustercolors.keys())[0]])
 
             if 'Wordcloud' not in disabled_modules:
                 create_wordcloud_widget(cluster, all_counts)
@@ -663,7 +748,7 @@ def main():
                     minimum_cluster_size,
                     cluster_selection_epsilon,
                     random_seed,
-                    different_labels,
+                    different_labels['by cluster'],
                     cluster_df,
                     results_text
                 )

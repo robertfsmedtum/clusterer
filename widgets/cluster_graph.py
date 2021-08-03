@@ -31,7 +31,8 @@ def create_cluster_graph_widget(
     dimension_reduction_method,
     number_of_neighbors,
     new_input_metric,
-    values
+    values,
+    dict_df
 ):
         datasource = ColumnDataSource(cluster_df)
         plot_figure = figure(
@@ -65,10 +66,10 @@ def create_cluster_graph_widget(
             'x',
             'y',
             source=datasource,
-            line_color=mapper,
+            line_color='black',
             color=mapper,
-            line_alpha=0.6,
-            fill_alpha=0.6,
+            line_alpha=0.25,
+            fill_alpha=0.9,
             size=4,
         )
 
@@ -97,23 +98,35 @@ def create_cluster_graph_widget(
                 mapper = LinearColorMapper(palette=color_palette, low=mi, high=ma)
 
                 if color_palette == RdGn2:
-                    desired_ticks = 2
-                    step = ma - mi
-                    smi = mi + step/4
-                    sma = ma - step/4
-                    mid = mi + step/2
-                    ticks_list = [smi, sma]
-                    ticks_list_dict = {smi: mi, sma: ma}
-                    mylist = [mi, mid, ma]
-                    ticker = FixedTicker(ticks=ticks_list)
-                    formatter = FuncTickFormatter(code="""
-                        var m = %s;  
-                        if (tick < m[1]) {
-                            return m[0]
-                        } else {
-                            return m[2]                  
-                        };
-                        """ % mylist)
+                    if len(different_labels) == 2:
+                        desired_ticks = 2
+                        step = ma - mi
+                        smi = mi + step/4
+                        sma = ma - step/4
+                        mid = mi + step/2
+                        ticks_list = [smi, sma]
+                        ticks_list_dict = {smi: mi, sma: ma}
+                        mylist = [mi, mid, ma]
+                        ticker = FixedTicker(ticks=ticks_list)
+                        formatter = FuncTickFormatter(code="""
+                            var m = %s;  
+                            if (tick < m[1]) {
+                                return m[0]
+                            } else {
+                                return m[2]                  
+                            };
+                            """ % mylist)
+
+                    else:
+                        desired_ticks = len(different_labels) if len(different_labels) <= 11 else 11
+                        smi = min(different_labels)
+                        sma = max(different_labels)
+                        s = sma - smi / len(different_labels)
+                        ticks_list = [smi] + [i*s+smi for i in range(desired_ticks-2)]
+                        ticker = FixedTicker(ticks=ticks_list)
+                        formatter = FuncTickFormatter(code="""
+                            return tick
+                            """)
                 else:
                     desired_ticks = 11
                     dif = ma - mi
@@ -153,11 +166,29 @@ def create_cluster_graph_widget(
                 ), text_font_style="italic"), 'above')
 
         if color_this_col != 'by cluster':
+                if color_this_col in list(dict_df.columns):
+                    td = dict(zip(list(dict_df[color_this_col]), list(dict_df.index)))
+                else:
+                    td = None
+                #### NEW
                 plot_figure.add_layout(Title(text=dimension_reduction_method + " projection colored by {} [{}-{}]".format(
                     color_this_col, 
                     int(min(different_labels)) if float(min(different_labels)).is_integer() else min(different_labels), 
                     int(max(different_labels)) if float(max(different_labels)).is_integer() else max(different_labels), 
                     ), text_font_size="16pt"), 'above')
+                if td != None:
+                    mytext = ''
+                    for k in different_labels:
+                        mytext += '{}: {}, '.format(k, td[k])
+                    mytext = mytext[:-2]
+                    plot_figure.add_layout(Title(
+                        text=mytext, text_font_style="italic"), 'below')
+                #### OLD
+                # plot_figure.add_layout(Title(text=dimension_reduction_method + " projection colored by {} [{}-{}]".format(
+                #     color_this_col, 
+                #     int(min(different_labels)) if float(min(different_labels)).is_integer() else min(different_labels), 
+                #     int(max(different_labels)) if float(max(different_labels)).is_integer() else max(different_labels), 
+                #     ), text_font_size="16pt"), 'above')
                 # plot_figure.add_layout(Title(text=dimension_reduction_method + " projection colored in {} values".format(len(different_labels), color_this_col), text_font_size="16pt"), 'above')
         else:
             if True in clustered:
