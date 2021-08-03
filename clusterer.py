@@ -89,7 +89,7 @@ def main():
 
     reorder_dict = {}
 
-    print(platform.processor())
+    st.write(platform.processor())
 
     if platform.processor():
         with open('reorder.json', 'r') as f:
@@ -136,9 +136,16 @@ def main():
                             if k in mycatdict:
                                 mycatdict[k] = int(previous_keydict[k])
                         conversion_dicts[col] = mycatdict
-                        df[col] = df[col].replace(mycatdict).astype('Int64')
+                        df[col] = df[col].replace(mycatdict)
+                        try:
+                            df[col] = df[col].astype('Int64')
+                        except:
+                            pass
         cdf = pd.DataFrame(conversion_dicts)
-        cdf = cdf.astype('Int32')
+        try:
+            cdf = cdf.astype('Int32')
+        except:
+            pass
         return df, cdf, reorder_dict
 
     @st.cache
