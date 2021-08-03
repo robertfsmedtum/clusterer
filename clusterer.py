@@ -89,6 +89,8 @@ def main():
 
     reorder_dict = {}
 
+    print(platform.processor())
+
     if platform.processor():
         with open('reorder.json', 'r') as f:
             reorder_dict = json.loads(f.read())
