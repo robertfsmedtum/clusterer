@@ -95,7 +95,7 @@ def main():
         with open('reorder.json', 'r') as f:
             reorder_dict = json.loads(f.read())
 
-    @st.cache
+    # @st.cache
     def convert_dataframe(df, drop_incomplete_rows, reorder_dict):
         if drop_incomplete_rows == 'Yes':
             df.replace('', np.nan, inplace=True)
