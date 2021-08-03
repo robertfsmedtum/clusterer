@@ -89,12 +89,7 @@ def main():
 
     reorder_dict = {}
 
-    st.write('Platform:')
-    st.write(str(platform.processor()))
-    st.write(str())
-
-
-    if len(str(platform.processor())) != '':
+    if len(str(platform.processor())) != 0:
         with open('reorder.json', 'r') as f:
             reorder_dict = json.loads(f.read())
 
