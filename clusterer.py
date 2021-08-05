@@ -517,9 +517,11 @@ def main():
                         ndf[col] = pd.cut(ser, bins=bins, labels=labels)
                     else:
                         if 0 in different_values and 1 in different_values and len(different_values) == 2:
-                            ser = ser.astype('category')
-                            ser = ser.replace(1, col)
-                            ser = ser.replace(0, '')
+                            try:
+                                ser = ser.replace(1, col)
+                                ser = ser.replace(0, '')
+                            except:
+                                print('Could not convert ser')
                         else:
                             if col in dict_df:
                                 ddf = dict_df.copy()
