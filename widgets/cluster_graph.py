@@ -192,7 +192,8 @@ def create_cluster_graph_widget(
                 # plot_figure.add_layout(Title(text=dimension_reduction_method + " projection colored in {} values".format(len(different_labels), color_this_col), text_font_size="16pt"), 'above')
         else:
             if True in clustered:
-                plot_figure.add_layout(Title(text=dimension_reduction_method + " projection with {} color-separated clusters".format(len(different_labels)-1), text_font_size="16pt"), 'above')
+                total_labels = len(different_labels) - 1 if -1 in different_labels else len(different_labels)
+                plot_figure.add_layout(Title(text=dimension_reduction_method + " projection with {} color-separated clusters".format(total_labels), text_font_size="16pt"), 'above')
             else:
                 plot_figure.add_layout(Title(text=dimension_reduction_method + " projection with no separated clusters", text_font_size="16pt"), 'above')
 

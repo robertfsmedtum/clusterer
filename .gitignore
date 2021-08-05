@@ -9,6 +9,7 @@ it.xlsx
 preprocess.py
 data
 test.py
+map.py
 disease_dict.json
 .*
 ~*
